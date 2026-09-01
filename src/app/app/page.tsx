@@ -25,7 +25,7 @@ export default async function DashboardPage() {
       <ul className="mt-10 grid gap-4 sm:grid-cols-2">
         <DashCard href="/app/profile" kicker="You" title="Your profile" body="Photo, firm, city, practice and contacts — the same record as the public Members page." />
         <DashCard href="/app/documents" kicker={`${docs} files`} title="Documents" body="Official register and the shared folder. Versioned and downloadable." />
-        <DashCard href="/app/questions" kicker={`${questions} open threads`} title="Questions" body="Any member can open a question. Anyone can comment. Email follows the thread." />
+        <DashCard href="/app/questions" kicker={`${questions} ${questions === 1 ? "open thread" : "open threads"}`} title="Questions" body="Any member can open a question. Anyone can comment. Email follows the thread." />
         <DashCard href="/app/votes" kicker={`${openVotes} open`} title="Votes" body="Admin opens. You vote once. The roll-call is public. Closed records are immutable." />
       </ul>
     </main>

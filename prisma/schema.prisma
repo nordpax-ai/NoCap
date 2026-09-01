@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String
+  role          String    @default("MEMBER") // ADMIN | MEMBER
+  status        String    @default("INVITED") // INVITED | ACTIVE | DEACTIVATED
+  firm          String?
+  city          String?
+  practiceArea  String?
+  jurisdiction  String?
+  bio           String?
+  photoPath     String?
+  contacts      String?
+  slug          String    @unique
+  isDemo        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deactivatedAt DateTime?
+
+  invitesSent         InviteToken[]         @relation("InvitedBy")
+  inviteTokens        InviteToken[]
+  resetTokens         PasswordResetToken[]
+  documents           Document[]            @relation("DocUploader")
+  documentVersions    DocumentVersion[]
+  questions           Question[]
+  questionComments    QuestionComment[]
+  questionAttachments QuestionAttachment[]
+  votesOpened         Vote[]                @relation("VoteOpener")
+  ballots             Ballot[]
+  voteEligibility     VoteEligible[]
+  voteAttachments     VoteAttachment[]
+}
+
+model InviteToken {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitedById String?
+  invitedBy   User?     @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Application {
+  id              String   @id @default(cuid())
+  name            String
+  firmAndCity     String
+  email           String
+  nominatedBy     String?
+  why             String
+  cvPath          String?
+  cvFilename      String?
+  privacyAccepted Boolean
+  createdAt       DateTime @default(now())
+}
+
+model Publication {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  category    String
+  authorName  String
+  publishedAt DateTime
+  excerpt     String
+  body        String
+  isDemo      Boolean  @default(true)
+}
+
+model NewsItem {
+  id        String   @id @default(cuid())
+  dateLabel String
+  title     String
+  sortDate  DateTime
+  isDemo    Boolean  @default(true)
+}
+
+model Document {
+  id           String             @id @default(cuid())
+  title        String
+  area         String // OFFICIAL | SHARED
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  uploadedById String
+  uploadedBy   User               @relation("DocUploader", fields: [uploadedById], references: [id])
+  versions     DocumentVersion[]
+}
+
+model DocumentVersion {
+  id           String   @id @default(cuid())
+  documentId   String
+  document     Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version      Int
+  filename     String
+  storagePath  String
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@unique([documentId, version])
+}
+
+model Question {
+  id          String               @id @default(cuid())
+  title       String
+  body        String
+  authorId    String
+  author      User                 @relation(fields: [authorId], references: [id])
+  deadline    DateTime?
+  createdAt   DateTime             @default(now())
+  comments    QuestionComment[]
+  attachments QuestionAttachment[]
+}
+
+model QuestionComment {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  body       String
+  createdAt  DateTime @default(now())
+}
+
+model QuestionAttachment {
+  id           String   @id @default(cuid())
+  questionId   String
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  filename     String
+  storagePath  String
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model Vote {
+  id                  String           @id @default(cuid())
+  object              String
+  description         String
+  deadline            DateTime
+  constitutivePercent Int
+  deliberativePercent Int
+  openedById          String
+  openedBy            User             @relation("VoteOpener", fields: [openedById], references: [id])
+  openedAt            DateTime         @default(now())
+  closedAt            DateTime?
+  ballots             Ballot[]
+  eligible            VoteEligible[]
+  attachments         VoteAttachment[]
+}
+
+model VoteEligible {
+  id           String @id @default(cuid())
+  voteId       String
+  vote         Vote   @relation(fields: [voteId], references: [id], onDelete: Restrict)
+  userId       String
+  user         User   @relation(fields: [userId], references: [id])
+  nameSnapshot String
+
+  @@unique([voteId, userId])
+}
+
+model Ballot {
+  id        String   @id @default(cuid())
+  voteId    String
+  vote      Vote     @relation(fields: [voteId], references: [id], onDelete: Restrict)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  choice    String // FOR | AGAINST | ABSTAIN
+  createdAt DateTime @default(now())
+
+  @@unique([voteId, userId])
+}
+
+model VoteAttachment {
+  id           String   @id @default(cuid())
+  voteId       String
+  vote         Vote     @relation(fields: [voteId], references: [id], onDelete: Restrict)
+  filename     String
+  storagePath  String
+  uploadedById String
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+}
+
+model EmailLog {
+  id      String   @id @default(cuid())
+  to      String
+  subject String
+  body    String
+  sentAt  DateTime @default(now())
+  via     String
+}

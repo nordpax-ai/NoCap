@@ -15,6 +15,12 @@ async function writeText(subdir: string, filename: string, body: string) {
 }
 
 async function main() {
+  const already = await prisma.user.findUnique({ where: { email: "paolo@example.com" } });
+  if (already) {
+    console.log("Seed already present; skipping.");
+    return;
+  }
+
   const passwordHash = await bcrypt.hash("nocap-demo", 12);
   const adminHash = await bcrypt.hash("nocap-admin", 12);
 

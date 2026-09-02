@@ -40,6 +40,11 @@ yarn-error.log*
 /data
 /prisma/dev.db
 /prisma/dev.db-journal
+/prisma/preview.db
+/prisma/preview.db-journal
+
+# netlify
+.netlify
 
 # vercel
 .vercel

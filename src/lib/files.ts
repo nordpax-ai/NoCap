@@ -2,7 +2,9 @@ import { randomUUID } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
-export const UPLOAD_ROOT = path.join(process.cwd(), "data", "uploads");
+const BUNDLE_UPLOAD_ROOT = path.join(process.cwd(), "data", "uploads");
+const SERVERLESS = Boolean(process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+export const UPLOAD_ROOT = SERVERLESS ? path.join("/tmp", "nocap-uploads") : BUNDLE_UPLOAD_ROOT;
 export const MAX_CV_BYTES = 5 * 1024 * 1024;
 export const MAX_DOC_BYTES = 20 * 1024 * 1024;
 
@@ -28,11 +30,19 @@ export async function saveUpload(subdir: string, file: File, maxBytes: number) {
 }
 
 export async function readUpload(storagePath: string) {
-  const resolved = path.resolve(UPLOAD_ROOT, storagePath);
-  if (!resolved.startsWith(path.resolve(UPLOAD_ROOT))) {
-    throw new Error("Invalid path");
+  const roots = SERVERLESS ? [UPLOAD_ROOT, BUNDLE_UPLOAD_ROOT] : [UPLOAD_ROOT];
+  for (const root of roots) {
+    const resolved = path.resolve(root, storagePath);
+    if (!resolved.startsWith(path.resolve(root))) {
+      throw new Error("Invalid path");
+    }
+    try {
+      return await readFile(resolved);
+    } catch {
+      // try the next root (bundled seed files on the preview host)
+    }
   }
-  return readFile(resolved);
+  throw new Error("File not found");
 }
 
 export function mimeFromName(filename: string) {

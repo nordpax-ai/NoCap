@@ -17,11 +17,12 @@ export function Logo({
   size?: Size;
   decorative?: boolean;
 }) {
-  const src = tone === "cream" ? "/brand/nocap-cream.png" : "/brand/nocap-navy.png";
-  const markClass = size === "home" ? "home-mark" : size === "footer" ? "footer-mark" : "nav-mark";
+  const src = tone === "cream" ? "/brand/nav-mark-cream.png" : "/brand/nav-mark-navy.png";
+  const markClass =
+    size === "home" ? "home-mark" : size === "footer" ? "footer-mark" : "nav-mark";
   const img = (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={decorative ? "" : "nocap"} className={markClass} />
+    <img src={src} alt={decorative ? "" : "nocap"} className={`${markClass} ${tone}`} />
   );
 
   if (decorative) {

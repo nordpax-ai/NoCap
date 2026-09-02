@@ -75,7 +75,7 @@ See `.env.example`.
 
 ## What is in the product
 
-Wordmarks in `public/brand/` are a faithful Outfit “nocap” mark (navy for paper pages, cream for the dark About chrome). Replace those files with Paolo’s extracted PNGs if they differ.
+Wordmarks in `public/brand/` (`nocap-navy.png` / `nocap-cream.png`) are Paolo’s geometric mark: navy on paper pages and the home hero, cream on the dark About chrome and footer. Home hero is `min(540px, 78vw)`; nav ~22px; footer ~24px.
 
 **Public site** (paper / coral / periwinkle — not NordPax navy/gold)
 

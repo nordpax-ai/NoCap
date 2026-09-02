@@ -75,7 +75,7 @@ See `.env.example`.
 
 ## What is in the product
 
-The home hero uses the vector wordmark `public/brand/home-mark.svg` (Paolo’s geometric mark). Nav and footer keep the small PNG marks. Home is a full-page pale-blue → peach wash.
+Public home follows Paolo’s HTML mockup: paper `#faf8f5` with a radial coral/periwinkle mesh, vector `home-mark.svg` in the hero, and a sticky nav (wordmark left; About / Members / Publications center; Private area pill right).
 
 **Public site** (paper / coral / periwinkle — not NordPax navy/gold)
 

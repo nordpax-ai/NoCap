@@ -10,23 +10,20 @@ const LINKS = [
   { href: "/about", label: "About" },
   { href: "/members", label: "Members" },
   { href: "/publications", label: "Publications" },
-  { href: "/membership", label: "Membership" },
 ];
 
-export function PublicNav({ ink = false, quiet = false }: { ink?: boolean; quiet?: boolean }) {
+export function PublicNav({ ink = false }: { ink?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const tone = ink ? "cream" : "navy";
 
   return (
-    <header className={classNames("public-nav sticky top-0 z-40", quiet && "public-nav-quiet")}>
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-        {quiet ? (
-          <span className="nav-mark-slot" aria-hidden />
-        ) : (
+    <header className="public-nav sticky top-0 z-40">
+      <div className="public-nav-inner">
+        <div className="public-nav-left">
           <Logo tone={tone} size="nav" />
-        )}
-        <nav className="ml-auto hidden items-center gap-7 md:flex" aria-label="Public">
+        </div>
+        <nav className="public-nav-center hidden md:flex" aria-label="Public">
           {LINKS.map((link) => (
             <Link
               key={link.href}
@@ -37,20 +34,22 @@ export function PublicNav({ ink = false, quiet = false }: { ink?: boolean; quiet
             </Link>
           ))}
         </nav>
-        <Link href="/private" className="nav-cta ml-auto md:ml-6">
-          <LockIcon />
-          <span>Private area</span>
-        </Link>
-        <button
-          type="button"
-          className="menu-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-line md:hidden"
-          aria-expanded={open}
-          aria-label="Open menu"
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className="sr-only">Menu</span>
-          <span aria-hidden className="block h-3.5 w-4 border-y-2 border-current" />
-        </button>
+        <div className="public-nav-right">
+          <Link href="/private" className="nav-cta">
+            <LockIcon />
+            <span>Private area</span>
+          </Link>
+          <button
+            type="button"
+            className="menu-btn inline-flex h-10 w-10 items-center justify-center rounded-full border border-line md:hidden"
+            aria-expanded={open}
+            aria-label="Open menu"
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span className="sr-only">Menu</span>
+            <span aria-hidden className="block h-3.5 w-4 border-y-2 border-current" />
+          </button>
+        </div>
       </div>
       {open ? (
         <nav className="border-t border-line px-4 py-3 md:hidden" aria-label="Mobile">

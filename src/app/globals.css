@@ -128,27 +128,57 @@ a {
   color: var(--periw);
 }
 
+.home-hero {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6.5rem 1.5rem 4rem;
+}
+
+.home-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(34rem, 86vw);
+}
+
+.home-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
 .home-tagline {
   font-family: var(--font-ui);
-  font-size: clamp(14px, 2vw, 18px);
+  font-size: clamp(15px, 2.1vw, 20px);
   font-weight: 500;
-  letter-spacing: 0.19em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
+  letter-spacing: -0.018em;
+  color: var(--ink);
+  margin-top: 1.85rem;
+  text-align: center;
+}
+
+.home-copy {
+  align-self: stretch;
+  text-align: left;
+  margin-top: 2.1rem;
 }
 
 .home-rule {
-  width: 56px;
-  height: 2px;
-  margin-inline: auto;
+  width: 3.25rem;
+  height: 3px;
   background: var(--ink);
 }
 
 .home-desc {
   font-family: var(--font-body);
-  font-size: 17px;
-  line-height: 1.62;
-  color: var(--slate);
+  font-size: clamp(16px, 1.7vw, 18px);
+  line-height: 1.7;
+  color: var(--ink);
+  margin-top: 1.45rem;
+  max-width: 38rem;
 }
 
 .nav-mark {
@@ -273,35 +303,30 @@ a {
   background: var(--paper);
 }
 
-.wash::before,
-.wash::after {
-  content: "";
+/* Paolo cover: full-page pale-blue (top-right) → peach/coral (bottom-left) */
+.public.public-home {
+  min-height: 100svh;
+  background: linear-gradient(
+    215deg,
+    #c5d2ec 0%,
+    #d2d4ea 18%,
+    #e6d4d6 48%,
+    #f2c4b0 78%,
+    #eeae96 100%
+  );
+}
+
+.public-home .wash {
+  background: transparent;
+}
+
+.public-home .public-nav {
   position: absolute;
-  inset: -22%;
-  z-index: -1;
-  pointer-events: none;
-}
-
-.wash::before {
-  background: radial-gradient(90% 70% at 12% 0%, rgba(232, 146, 124, 0.48), transparent 55%);
-  animation: wash-drift 18s ease-in-out infinite;
-}
-
-.wash::after {
-  background:
-    radial-gradient(80% 60% at 92% 8%, rgba(185, 198, 228, 0.58), transparent 50%),
-    radial-gradient(70% 50% at 50% 100%, rgba(240, 168, 142, 0.22), transparent 55%);
-  animation: wash-drift 24s ease-in-out infinite reverse;
-}
-
-@keyframes wash-drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(3%, 2%, 0) scale(1.08);
-  }
+  left: 0;
+  right: 0;
+  background: transparent;
+  border-bottom-color: transparent;
+  backdrop-filter: none;
 }
 
 .public-ink {
@@ -431,10 +456,5 @@ button {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-
-  .wash::before,
-  .wash::after {
-    animation: none;
   }
 }

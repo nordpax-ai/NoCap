@@ -17,7 +17,12 @@ export function Logo({
   size?: Size;
   decorative?: boolean;
 }) {
-  const src = tone === "cream" ? "/brand/nav-mark-cream.png" : "/brand/nav-mark-navy.png";
+  const src =
+    size === "home"
+      ? "/brand/home-mark.svg"
+      : tone === "cream"
+        ? "/brand/nav-mark-cream.png"
+        : "/brand/nav-mark-navy.png";
   const markClass =
     size === "home" ? "home-mark" : size === "footer" ? "footer-mark" : "nav-mark";
   const img = (

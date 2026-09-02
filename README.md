@@ -75,7 +75,7 @@ See `.env.example`.
 
 ## What is in the product
 
-Wordmarks in `public/brand/` (`nocap-navy.png` / `nocap-cream.png`) are Paolo’s geometric mark: navy on paper pages and the home hero, cream on the dark About chrome and footer. Home hero is `min(540px, 78vw)`; nav ~22px; footer ~24px.
+The home hero uses the vector wordmark `public/brand/home-mark.svg` (Paolo’s geometric mark). Nav and footer keep the small PNG marks. Home is a full-page pale-blue → peach wash.
 
 **Public site** (paper / coral / periwinkle — not NordPax navy/gold)
 

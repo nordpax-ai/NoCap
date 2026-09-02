@@ -129,11 +129,27 @@ a {
 }
 
 .home-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: calc(100svh - 3.75rem);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 4rem 1.5rem;
+  background: #faf8f5;
+}
+
+.home-grad {
+  position: absolute;
+  inset: -30%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 55% at 20% 80%, #f0a88e 0%, rgba(240, 168, 142, 0) 62%),
+    radial-gradient(55% 50% at 80% 16%, #b9c6e4 0%, rgba(185, 198, 228, 0) 62%),
+    radial-gradient(70% 60% at 58% 58%, #f2cdbd 0%, rgba(242, 205, 189, 0) 70%),
+    #faf8f5;
 }
 
 .home-cover {
@@ -190,9 +206,8 @@ a {
 }
 
 .public-nav {
-  backdrop-filter: blur(14px);
-  background: color-mix(in srgb, var(--paper) 82%, transparent);
-  border-bottom: 1px solid var(--line);
+  background: #faf8f5;
+  border-bottom: 1px solid #e3e0da;
 }
 
 .public-nav-inner {

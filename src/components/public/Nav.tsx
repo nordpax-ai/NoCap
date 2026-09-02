@@ -13,15 +13,19 @@ const LINKS = [
   { href: "/membership", label: "Membership" },
 ];
 
-export function PublicNav({ ink = false }: { ink?: boolean }) {
+export function PublicNav({ ink = false, quiet = false }: { ink?: boolean; quiet?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const tone = ink ? "cream" : "navy";
 
   return (
-    <header className="public-nav sticky top-0 z-40">
+    <header className={classNames("public-nav sticky top-0 z-40", quiet && "public-nav-quiet")}>
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
-        <Logo tone={tone} size="nav" />
+        {quiet ? (
+          <span className="nav-mark-slot" aria-hidden />
+        ) : (
+          <Logo tone={tone} size="nav" />
+        )}
         <nav className="ml-auto hidden items-center gap-7 md:flex" aria-label="Public">
           {LINKS.map((link) => (
             <Link

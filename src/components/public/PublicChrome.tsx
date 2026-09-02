@@ -18,7 +18,7 @@ export function PublicChrome({ children }: { children: React.ReactNode }) {
         home && "public-home",
       )}
     >
-      <PublicNav ink={ink} />
+      <PublicNav ink={ink} quiet={home} />
       <div className="flex-1">{children}</div>
       <PublicFooter ink={ink} />
     </div>

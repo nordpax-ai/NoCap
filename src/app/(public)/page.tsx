@@ -8,14 +8,12 @@ export default function HomePage() {
           <Logo size="home" decorative />
           <p className="home-tagline">NextGen European Deal Lawyers</p>
         </div>
-        <div className="home-copy">
-          <div className="home-rule" />
-          <p className="home-desc">
-            A private European circle for the next generation of lawyers working on
-            M&A, private equity, venture capital and corporate transactions. Small
-            by design, by invitation, and built by its members.
-          </p>
-        </div>
+        <hr className="home-rule" />
+        <p className="home-desc">
+          A private European circle for the next generation of lawyers working on
+          M&A, private equity, venture capital and corporate transactions. Small
+          by design. Active by rule. Built by its members.
+        </p>
       </div>
     </section>
   );

@@ -13,8 +13,9 @@ export default async function LoginPage({
   const { next } = await searchParams;
   return (
     <main className="mx-auto max-w-md px-4 py-16 sm:px-6">
-      <h1 className="text-3xl">Private area</h1>
-      <p className="mt-3 text-slate">Members only. There is no open registration.</p>
+      <p className="eyebrow">Private area</p>
+      <h1 className="pt mt-4">Private area</h1>
+      <p className="lede mt-3">Members only. There is no open registration.</p>
       <LoginForm action={loginAction} next={next || "/app"} />
       <p className="mt-6 text-sm text-slate">
         <Link href="/forgot-password" className="underline">

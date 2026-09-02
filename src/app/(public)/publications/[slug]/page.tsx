@@ -28,8 +28,8 @@ export default async function PublicationPage({
       <Link href="/publications" className="text-sm text-slate hover:text-ink">
         ← Publications
       </Link>
-      <p className="mt-8 text-xs tracking-[0.14em] text-coral uppercase">{piece.category}</p>
-      <h1 className="mt-3 text-4xl">{piece.title}</h1>
+      <p className="pub-kicker mt-8">{piece.category}</p>
+      <h1 className="pt mt-3">{piece.title}</h1>
       <p className="mt-3 text-sm text-slate-lt">
         {piece.authorName} · {formatDate(piece.publishedAt)}
       </p>

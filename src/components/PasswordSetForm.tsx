@@ -19,8 +19,8 @@ export function PasswordSetForm({
   return (
     <form action={formAction} className="mt-8 grid gap-4">
       <input type="hidden" name="token" value={token} />
-      <label className="grid gap-1.5 text-sm">
-        <span>Password</span>
+      <label className="grid gap-1.5">
+        <span className="field-label">Password</span>
         <input
           className="field"
           name="password"
@@ -30,8 +30,8 @@ export function PasswordSetForm({
           autoComplete="new-password"
         />
       </label>
-      <label className="grid gap-1.5 text-sm">
-        <span>Confirm password</span>
+      <label className="grid gap-1.5">
+        <span className="field-label">Confirm password</span>
         <input
           className="field"
           name="confirm"
@@ -44,7 +44,7 @@ export function PasswordSetForm({
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex w-fit rounded-full bg-ink px-5 py-2.5 text-sm text-paper disabled:opacity-60"
+        className="btn w-fit"
       >
         {pending ? "Saving…" : "Continue"}
       </button>

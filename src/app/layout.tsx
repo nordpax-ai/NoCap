@@ -9,30 +9,39 @@ import {
 import "./globals.css";
 
 const outfit = Outfit({
-  variable: "--font-outfit",
+  variable: "--ff-outfit",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  display: "swap",
 });
 
 const manrope = Manrope({
-  variable: "--font-manrope",
+  variable: "--ff-manrope",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 const instrument = Instrument_Serif({
-  variable: "--font-instrument",
+  variable: "--ff-instrument",
   subsets: ["latin"],
   weight: "400",
-  style: ["normal", "italic"],
+  style: "italic",
+  display: "swap",
 });
 
 const inter = Inter({
-  variable: "--font-inter",
+  variable: "--ff-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  display: "swap",
 });
 
 const newsreader = Newsreader({
-  variable: "--font-newsreader",
+  variable: "--ff-news",
   subsets: ["latin"],
+  weight: ["500"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -50,6 +59,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       lang="en"
       className={`${outfit.variable} ${manrope.variable} ${instrument.variable} ${inter.variable} ${newsreader.variable} h-full antialiased`}
     >
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=Inter:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Newsreader:wght@500&family=Outfit:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="flex min-h-full flex-col bg-paper text-ink">{children}</body>
     </html>
   );

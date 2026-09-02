@@ -12,7 +12,8 @@ export default async function ResetPasswordPage({
   const { token } = await searchParams;
   return (
     <main className="mx-auto max-w-md px-4 py-16 sm:px-6">
-      <h1 className="text-3xl">Set a new password</h1>
+      <p className="eyebrow">Private area</p>
+      <h1 className="pt mt-4">Set a new password</h1>
       <PasswordSetForm action={resetPasswordAction} token={token || ""} />
     </main>
   );

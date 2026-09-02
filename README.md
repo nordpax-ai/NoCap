@@ -75,6 +75,8 @@ See `.env.example`.
 
 ## What is in the product
 
+Wordmarks in `public/brand/` are a faithful Outfit “nocap” mark (navy for paper pages, cream for the dark About chrome). Replace those files with Paolo’s extracted PNGs if they differ.
+
 **Public site** (paper / coral / periwinkle — not NordPax navy/gold)
 
 - Home: logo, the line “NextGen European Deal Lawyers”, and the short description. No apply CTA.

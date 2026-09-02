@@ -37,8 +37,8 @@ export default async function MemberProfilePage({
           photoSrc={member.photoPath ? `/api/files/${member.photoPath}` : null}
         />
         <div>
-          <h1 className="text-4xl">{member.name}</h1>
-          <p className="mt-2 text-slate">
+          <h1 className="pt">{member.name}</h1>
+          <p className="member-role mt-2">
             {[member.practiceArea, member.firm, member.city].filter(Boolean).join(" · ")}
           </p>
           {member.jurisdiction ? (

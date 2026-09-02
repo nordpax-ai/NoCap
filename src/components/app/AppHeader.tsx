@@ -15,7 +15,7 @@ export function AppHeader({ user }: { user: SessionUser }) {
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--rule)] bg-[color-mix(in_srgb,var(--paper)_92%,transparent)] backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-3 sm:px-6">
-        <Link href="/app" className="font-[family-name:var(--font-news)] text-lg tracking-tight">
+        <Link href="/app" className="font-[family-name:var(--ff-news)] text-lg tracking-tight">
           nocap
         </Link>
         <nav className="hidden items-center gap-5 text-sm text-[var(--ink-2)] md:flex" aria-label="Private area">

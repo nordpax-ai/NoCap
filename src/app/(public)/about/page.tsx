@@ -8,9 +8,9 @@ export default async function AboutPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
-      <p className="text-xs tracking-[0.18em] text-slate-lt uppercase">About</p>
-      <h1 className="mt-3 text-4xl text-ink sm:text-5xl">A circle, not a network.</h1>
-      <p className="accent mt-5 text-xl text-slate">
+      <p className="eyebrow">About</p>
+      <h1 className="pt mt-4">A circle, not a network.</h1>
+      <p className="lede-about mt-6">
         Built by people who already called each other — and decided that was the point.
       </p>
 
@@ -32,16 +32,16 @@ export default async function AboutPage() {
       </section>
 
       <section className="mt-16">
-        <h2 className="text-2xl">Latest news</h2>
-        <ol className="mt-6 divide-y divide-line border-y border-line">
+        <h2 className="text-[1.65rem]">Latest news</h2>
+        <ol className="mt-6 divide-y divide-white/10 border-y border-white/10">
           {news.map((item) => (
             <li key={item.id} className="flex flex-col gap-1 py-4 sm:flex-row sm:gap-8">
-              <span className="w-28 shrink-0 text-sm text-slate-lt">{item.dateLabel}</span>
-              <span className="text-ink">{item.title}</span>
+              <span className="w-28 shrink-0 text-sm text-periw">{item.dateLabel}</span>
+              <span>{item.title}</span>
             </li>
           ))}
         </ol>
-        <p className="mt-4 text-xs text-slate-lt">Demo timeline from the public mockup.</p>
+        <p className="mt-4 text-xs opacity-70">Demo timeline from the public mockup.</p>
       </section>
     </main>
   );
@@ -50,8 +50,8 @@ export default async function AboutPage() {
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="text-2xl">{title}</h2>
-      <p className="mt-3 leading-relaxed text-slate">{children}</p>
+      <h2 className="text-[1.65rem]">{title}</h2>
+      <p className="mt-3 leading-relaxed">{children}</p>
     </div>
   );
 }

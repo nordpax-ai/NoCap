@@ -26,7 +26,7 @@ export function Avatar({
   return (
     <span
       aria-hidden
-      className="inline-grid place-items-center rounded-full font-[family-name:var(--font-outfit)] font-medium text-ink-deep"
+      className="inline-grid place-items-center rounded-full font-[family-name:var(--ff-outfit)] font-medium text-ink-deep"
       style={{
         width: size,
         height: size,

@@ -13,11 +13,9 @@ export default async function MembersPage() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-      <p className="text-xs tracking-[0.18em] text-slate-lt uppercase">Members</p>
-      <h1 className="mt-3 max-w-2xl text-4xl text-ink sm:text-5xl">
-        The people, not the letterheads.
-      </h1>
-      <p className="mt-5 max-w-2xl leading-relaxed text-slate">
+      <p className="eyebrow">Members</p>
+      <h1 className="pt mt-4 max-w-2xl">The people, not the letterheads.</h1>
+      <p className="lede mt-5 max-w-2xl">
         Membership is personal. It belongs to the member, not the firm. Profiles
         on this page are fed from the private area — when a member leaves, they
         disappear from here.
@@ -26,18 +24,15 @@ export default async function MembersPage() {
       <ul className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {members.map((m) => (
           <li key={m.id}>
-            <Link
-              href={`/members/${m.slug}`}
-              className="block h-full rounded-2xl border border-line bg-white/70 p-5 transition hover:border-coral-soft"
-            >
+            <Link href={`/members/${m.slug}`} className="card block h-full p-5 transition hover:border-coral-soft">
               <div className="flex items-start gap-4">
                 <Avatar
                   name={m.name}
                   photoSrc={m.photoPath ? `/api/files/${m.photoPath}` : null}
                 />
                 <div>
-                  <h2 className="text-xl leading-tight">{m.name}</h2>
-                  <p className="mt-1 text-sm text-slate">
+                  <h2 className="member-name text-[1.35rem] leading-tight">{m.name}</h2>
+                  <p className="member-role mt-1 text-sm">
                     {m.practiceArea || "Deal lawyer"}
                     {m.city ? ` · ${m.city}` : ""}
                   </p>

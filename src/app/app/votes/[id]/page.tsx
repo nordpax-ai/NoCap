@@ -97,7 +97,7 @@ export default async function VoteDetailPage({
           </div>
         </dl>
         {outcome.isClosed ? (
-          <p className="mt-4 font-[family-name:var(--font-news)] text-lg">{recordLabel(outcome.record)}</p>
+          <p className="mt-4 font-[family-name:var(--ff-news)] text-lg">{recordLabel(outcome.record)}</p>
         ) : null}
         {outcome.isClosed ? (
           <a className="mt-4 inline-block text-sm underline" href={`/api/votes/${vote.id}/pdf`}>

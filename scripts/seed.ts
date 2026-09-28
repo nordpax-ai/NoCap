@@ -1,0 +1,411 @@
+import { randomBytes, createHash } from "crypto";
+import { mkdir, writeFile, rm } from "fs/promises";
+import path from "path";
+import bcrypt from "bcryptjs";
+import { Pool } from "pg";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import { loadEnv } from "./load-env";
+
+loadEnv();
+
+const PASSWORD = "example-password";
+
+type Person = {
+  email: string;
+  name: string;
+  role: "admin" | "member";
+  status?: "active" | "deactivated";
+  firm: string;
+  city: string;
+  jurisdiction: string;
+  publicRole: string;
+  practice: string;
+  bio: string;
+  contacts: string;
+};
+
+const people: Person[] = [
+  {
+    email: "paolo.piccirilli@example.invalid",
+    name: "Paolo Piccirilli",
+    role: "admin",
+    firm: "Example firm",
+    city: "Rome",
+    jurisdiction: "Italy",
+    publicRole: "Chair (example)",
+    practice: "Example practice area",
+    bio: "Example profile from the members-area mockup. Not a real biography.",
+    contacts: "example-contact",
+  },
+  {
+    email: "elena.rossi@example.invalid",
+    name: "Elena Rossi",
+    role: "member",
+    firm: "Example firm",
+    city: "Milan",
+    jurisdiction: "Italy",
+    publicRole: "Senior Associate · M&A",
+    practice: "Private equity and carve-outs",
+    bio: "Private equity and carve-outs in the industrial mid-market. Two years in New York before returning to Milan.",
+    contacts: "example-contact",
+  },
+  {
+    email: "lukas.brandt@example.invalid",
+    name: "Lukas Brandt",
+    role: "member",
+    firm: "Example firm",
+    city: "Frankfurt",
+    jurisdiction: "Germany",
+    publicRole: "Counsel · Corporate",
+    practice: "Foreign investment screening and public M&A",
+    bio: "Cross-border acquisitions with a focus on foreign investment screening and public M&A.",
+    contacts: "example-contact",
+  },
+  {
+    email: "sofie.jansen@example.invalid",
+    name: "Sofie Jansen",
+    role: "member",
+    firm: "Example firm",
+    city: "Amsterdam",
+    jurisdiction: "Netherlands",
+    publicRole: "Senior Associate · Transactions",
+    practice: "Buy-side private equity",
+    bio: "Buy-side private equity and W&I-backed deals across the Benelux.",
+    contacts: "example-contact",
+  },
+  {
+    email: "camille.baptiste@example.invalid",
+    name: "Camille Baptiste",
+    role: "member",
+    firm: "Example firm",
+    city: "Paris",
+    jurisdiction: "France",
+    publicRole: "Managing Associate · Private Equity",
+    practice: "Sponsor-side private equity",
+    bio: "Sponsor-side work in the French mid-market, with a standing interest in how technology reaches the deal table.",
+    contacts: "example-contact",
+  },
+  {
+    email: "andres.vidal@example.invalid",
+    name: "Andrés Vidal",
+    role: "member",
+    firm: "Example firm",
+    city: "Madrid",
+    jurisdiction: "Spain",
+    publicRole: "Junior Partner · Corporate",
+    practice: "Growth equity and venture",
+    bio: "Growth equity and venture transactions, with a practice split between Madrid and Lisbon.",
+    contacts: "example-contact",
+  },
+  {
+    email: "erik.lindqvist@example.invalid",
+    name: "Erik Lindqvist",
+    role: "member",
+    firm: "Example firm",
+    city: "Stockholm",
+    jurisdiction: "Sweden",
+    publicRole: "Associate · M&A",
+    practice: "Nordic sell-side processes",
+    bio: "Nordic sell-side processes and cross-border auctions, mostly in technology and healthcare.",
+    contacts: "example-contact",
+  },
+  {
+    email: "clara.example@example.invalid",
+    name: "Clara Example",
+    role: "member",
+    firm: "Example firm",
+    city: "Lisbon",
+    jurisdiction: "Portugal",
+    publicRole: "Associate · Corporate (example)",
+    practice: "Example practice",
+    bio: "Example of a member who has left. This profile must not appear on the public members page.",
+    contacts: "example-contact",
+  },
+];
+
+const publications = [
+  ["deal-terms-locked-box", "Deal terms", "Locked box or closing accounts: what the mid-market actually chose this year", "Settled in theory, unsettled in practice. Where each mechanism is holding, and the leakage drafting that keeps causing arguments.", "Elena Rossi", "2026-03-12", true],
+  ["regulatory-german-fdi", "Regulatory", "German FDI screening: the questions that actually delay signing", "Filing is rarely the problem. The timetable slips on the three information requests that come after — and they are largely predictable.", "Lukas Brandt", "2026-02-18", false],
+  ["risk-wi-retention", "Risk allocation", "W&I retention levels are moving. Slowly.", "What brokers are quoting across five European markets, and why the nil-retention product is still harder to get than everyone assumes.", "Sofie Jansen", "2026-02-04", false],
+  ["structuring-earn-outs", "Structuring", "Earn-outs are back. The drafting hasn't caught up.", "Post-closing conduct covenants are still negotiated as boilerplate, and that is where the disputes are coming from.", "Andrés Vidal", "2026-01-20", false],
+  ["practice-ai-deal-process", "Practice", "What AI actually changed in our deal process", "Not the drafting. A candid account of where the tools help on a live transaction, and where they quietly cost time.", "Camille Baptiste", "2026-01-09", false],
+  ["cross-border-nordic-habits", "Cross-border", "Nordic sellers, continental buyers: five habits that clash", "Disclosure culture, warranty expectations and the meaning of \"agreed form\" travel worse than anyone expects.", "Erik Lindqvist", "2025-12-11", false],
+] as const;
+
+async function main() {
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL_OWNER });
+  const storageDir = process.env.STORAGE_LOCAL_DIR || "./var/storage";
+  await rm(storageDir, { recursive: true, force: true });
+  await rm(path.join("var", "emails"), { recursive: true, force: true });
+  await mkdir(storageDir, { recursive: true });
+  await mkdir(path.join("var", "emails"), { recursive: true });
+
+  await pool.query(`
+    TRUNCATE
+      resolutions, ballots, vote_electorate, votes,
+      attachments, question_comments, questions,
+      document_versions, documents,
+      publications, applications,
+      auth_tokens, sessions, profiles
+    RESTART IDENTITY CASCADE
+  `);
+
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
+  const ids = new Map<string, string>();
+
+  for (const person of people) {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO profiles (
+         email, password_hash, role, status, display_name, firm, city, jurisdiction,
+         public_role, practice_area, bio, contacts, is_example
+       ) VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,$9,$10,$11,true)
+       RETURNING id`,
+      [
+        person.email,
+        passwordHash,
+        person.role,
+        person.name,
+        person.firm,
+        person.city,
+        person.jurisdiction,
+        person.publicRole,
+        person.practice,
+        person.bio,
+        person.contacts,
+      ],
+    );
+    ids.set(person.name, rows[0].id);
+  }
+
+  const adminId = ids.get("Paolo Piccirilli")!;
+
+  async function putText(key: string, text: string) {
+    const full = path.join(storageDir, key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, text);
+  }
+
+  async function addRegister(category: string, title: string, versions: { name: string; text: string; at: string }[]) {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO documents (area, category, title, created_by, immutable, created_at)
+       VALUES ('register', $1, $2, $3, $4, $5) RETURNING id`,
+      [category, title, adminId, category === "resolution", versions[0].at],
+    );
+    const documentId = rows[0].id;
+    let n = 1;
+    for (const version of versions) {
+      const key = `documents/${documentId}/v${n}-${version.name}`;
+      await putText(key, version.text);
+      await pool.query(
+        `INSERT INTO document_versions
+           (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
+         VALUES ($1,$2,$3,$4,'text/plain',$5,$6,$7)`,
+        [documentId, n, key, version.name, Buffer.byteLength(version.text), adminId, version.at],
+      );
+      n += 1;
+    }
+  }
+
+  const exampleNote = "EXAMPLE PLACEHOLDER. Not an adopted text.\n";
+  await addRegister("charter", "Charter", [
+    { name: "charter-v1.txt", text: exampleNote + "Example charter, version 1.\n", at: "2025-11-20T10:00:00Z" },
+    { name: "charter-v2.txt", text: exampleNote + "Example charter, version 2.\n", at: "2026-06-02T10:00:00Z" },
+    { name: "charter-v3.txt", text: exampleNote + "Example charter, version 3.\n", at: "2026-08-18T10:00:00Z" },
+  ]);
+  await addRegister("code_of_conduct", "Code of conduct", [
+    { name: "code-of-conduct-v2.txt", text: exampleNote + "Example code of conduct.\n", at: "2026-08-18T10:00:00Z" },
+  ]);
+  for (const [title, at] of [
+    ["Minutes — founding meeting", "2025-11-20T10:00:00Z"],
+    ["Minutes — January call", "2026-01-15T10:00:00Z"],
+    ["Minutes — March call", "2026-03-12T10:00:00Z"],
+    ["Minutes — June call", "2026-06-02T10:00:00Z"],
+  ] as const) {
+    await addRegister("minutes", title, [{ name: "minutes.txt", text: exampleNote + title + "\n", at }]);
+  }
+  await addRegister("resolution", "Resolution — example, uploaded file", [
+    { name: "resolution.txt", text: exampleNote + "An uploaded resolution. It cannot be edited or deleted.\n", at: "2026-08-18T12:00:00Z" },
+  ]);
+
+  const sharedId = (await pool.query<{ id: string }>(
+    `INSERT INTO documents (area, category, title, created_by, created_at)
+     VALUES ('shared', 'shared', 'Example note on leakage drafting', $1, '2026-03-12T09:00:00Z')
+     RETURNING id`,
+    [ids.get("Elena Rossi")],
+  )).rows[0].id;
+  const sharedKey = `documents/${sharedId}/v1-note.txt`;
+  const sharedText = "EXAMPLE. A shared note, not a publication and not a resolution.\n";
+  await putText(sharedKey, sharedText);
+  await pool.query(
+    `INSERT INTO document_versions
+       (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
+     VALUES ($1, 1, $2, 'note.txt', 'text/plain', $3, $4, '2026-03-12T09:00:00Z')`,
+    [sharedId, sharedKey, Buffer.byteLength(sharedText), ids.get("Elena Rossi")],
+  );
+
+  for (const [slug, category, title, summary, author, published, withPdf] of publications) {
+    let pdfKey: string | null = null;
+    if (withPdf) {
+      const doc = await PDFDocument.create();
+      const page = doc.addPage([595, 842]);
+      const font = await doc.embedFont(StandardFonts.TimesRoman);
+      page.drawText("EXAMPLE PUBLICATION — not a real article.", { x: 54, y: 760, size: 14, font });
+      page.drawText(title, { x: 54, y: 730, size: 12, font });
+      pdfKey = `publications/${slug}.pdf`;
+      const bytes = await doc.save();
+      const full = path.join(storageDir, pdfKey);
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, Buffer.from(bytes));
+    }
+    const body =
+      "Example text from the design mockup. This is not a real publication.\n\n" +
+      summary +
+      "\n\nThe detail format — this page, and an optional PDF — is a placeholder. It is still an open decision.";
+    await pool.query(
+      `INSERT INTO publications (slug, title, category, summary, body, author_id, published_on, pdf_key, is_example)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
+      [slug, title, category, summary, body, ids.get(author), published, pdfKey],
+    );
+  }
+
+  const questionId = (await pool.query<{ id: string }>(
+    `INSERT INTO questions (author_id, title, body, created_at)
+     VALUES ($1, $2, $3, '2026-08-24T09:00:00Z') RETURNING id`,
+    [
+      ids.get("Elena Rossi"),
+      "Annual meeting — venue options",
+      "Example question. Where should the annual meeting be held, and does anyone have a room we can use without a fee?",
+    ],
+  )).rows[0].id;
+  await pool.query(
+    `INSERT INTO question_comments (question_id, author_id, body, created_at) VALUES
+       ($1, $2, 'Example reply. Lisbon is easy to reach and I can ask about a room.', '2026-08-24T11:00:00Z'),
+       ($1, $3, 'Example reply from a member who later left. This comment stays in the thread.', '2026-08-24T15:00:00Z')`,
+    [questionId, ids.get("Lukas Brandt"), ids.get("Clara Example")],
+  );
+
+  const openQuestion = (await pool.query<{ id: string }>(
+    `INSERT INTO questions (author_id, title, body, deadline, created_at)
+     VALUES ($1, $2, $3, now() + interval '21 days', now() - interval '2 days') RETURNING id`,
+    [
+      ids.get("Sofie Jansen"),
+      "Example: which market note should we write next?",
+      "Example question with a deadline. Reply if you would read a short note on warranty insurance.",
+    ],
+  )).rows[0].id;
+  await pool.query(
+    `INSERT INTO question_comments (question_id, author_id, body) VALUES ($1, $2, 'Example reply. I would read it.')`,
+    [openQuestion, ids.get("Erik Lindqvist")],
+  );
+
+  async function openAndMaybeClose(options: {
+    subject: string;
+    description: string;
+    qc: number;
+    qd: number;
+    deadline: string;
+    votes: { name: string; choice: "for" | "against" | "abstain"; at?: string }[];
+    close?: { opened: string; closed: string };
+  }) {
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT private.open_vote($1, $2, $3, $4::timestamptz, $5, $6) AS id`,
+      [adminId, options.subject, options.description, options.deadline, options.qc, options.qd],
+    );
+    const voteId = rows[0].id;
+    for (const vote of options.votes) {
+      await pool.query(
+        `INSERT INTO ballots (vote_id, voter_id, choice, cast_at) VALUES ($1, $2, $3, coalesce($4::timestamptz, now()))`,
+        [voteId, ids.get(vote.name), vote.choice, vote.at ?? null],
+      );
+    }
+    if (options.close) {
+      await pool.query(`SELECT private.seed_close_vote($1, $2::timestamptz, $3::timestamptz)`, [
+        voteId,
+        options.close.opened,
+        options.close.closed,
+      ]);
+    }
+    return voteId;
+  }
+
+  await openAndMaybeClose({
+    subject: "Adoption of the code of conduct",
+    description: "Example closed vote. The code of conduct circulated on 18 August is put to the members.",
+    qc: 50,
+    qd: 50,
+    deadline: new Date(Date.now() + 86_400_000).toISOString(),
+    votes: [
+      ...["Paolo Piccirilli", "Elena Rossi", "Lukas Brandt", "Sofie Jansen", "Camille Baptiste", "Andrés Vidal", "Erik Lindqvist"].map(
+        (name) => ({ name, choice: "for" as const, at: "2026-08-18T16:00:00Z" }),
+      ),
+      { name: "Clara Example", choice: "abstain" as const, at: "2026-08-18T16:30:00Z" },
+    ],
+    close: { opened: "2026-08-18T09:00:00Z", closed: "2026-08-18T18:00:00Z" },
+  });
+
+  await pool.query(`SELECT private.set_member_status($1, $2, 'deactivated')`, [
+    adminId,
+    ids.get("Clara Example"),
+  ]);
+
+  await openAndMaybeClose({
+    subject: "Example: quorum not met",
+    description:
+      "Example closed vote. One member voted. The constitutive quorum was 90 percent, so the result is invalid whatever the votes say.",
+    qc: 90,
+    qd: 50,
+    deadline: new Date(Date.now() + 86_400_000).toISOString(),
+    votes: [{ name: "Paolo Piccirilli", choice: "for", at: "2026-09-01T10:00:00Z" }],
+    close: { opened: "2026-09-01T09:00:00Z", closed: "2026-09-01T18:00:00Z" },
+  });
+
+  await openAndMaybeClose({
+    subject: "Admission of a nominated candidate",
+    description:
+      "Example vote, still open. Nomination of a corporate M&A senior associate in Stockholm, proposed by Elena and seconded by Lukas. The CV in this example is not a real document. Admission in this example uses the quorums set below, not a rule copied from a charter.",
+    qc: 50,
+    qd: 67,
+    deadline: "2026-10-15T18:00:00+02:00",
+    votes: [
+      { name: "Elena Rossi", choice: "for" },
+      { name: "Lukas Brandt", choice: "for" },
+      { name: "Sofie Jansen", choice: "for" },
+      { name: "Camille Baptiste", choice: "against" },
+    ],
+  });
+
+  const inviteToken = randomBytes(32).toString("base64url");
+  const inviteHash = createHash("sha256").update(inviteToken).digest("hex");
+  await pool.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [
+    adminId,
+    "new.member@example.invalid",
+    "New Example",
+    inviteHash,
+  ]);
+  const inviteUrl = `${process.env.APP_URL || "http://localhost:3000"}/join/${inviteToken}`;
+  await writeFile(
+    path.join("var", "emails", "000-seed-invite.json"),
+    JSON.stringify(
+      {
+        id: "seed-invite",
+        at: new Date().toISOString(),
+        to: ["new.member@example.invalid"],
+        subject: "You are invited to nocap",
+        text: `Hello New Example,\n\nYou have been invited to the nocap members' area.\n\n${inviteUrl}\n`,
+      },
+      null,
+      2,
+    ),
+  );
+
+  await pool.end();
+  console.log("Seeded example data.");
+  console.log(`Admin login: paolo.piccirilli@example.invalid / ${PASSWORD}`);
+  console.log(`Member login: elena.rossi@example.invalid / ${PASSWORD}`);
+  console.log(`Pending invite: ${inviteUrl}`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

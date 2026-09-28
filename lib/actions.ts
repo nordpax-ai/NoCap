@@ -1,0 +1,590 @@
+"use server";
+
+import { randomUUID } from "crypto";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { pool, errorMessage } from "./db";
+import {
+  checkPassword,
+  clearSession,
+  getCurrentUser,
+  hashPassword,
+  newToken,
+  passwordProblem,
+  requireAdmin,
+  requireUser,
+  startSession,
+  tokenHash,
+} from "./auth";
+import { appLink, sendEmail } from "./email";
+import { env } from "./env";
+import { readUpload, safeFilename, storagePut } from "./storage";
+import { parseClubDateTime } from "./time";
+import { closeDueVotes } from "./votes";
+
+function go(path: string, error?: string): never {
+  const url = error ? `${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error)}` : path;
+  redirect(url);
+}
+
+export async function login(formData: FormData) {
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const { rows } = await pool.query<{ id: string; password_hash: string | null; status: string }>(
+    `SELECT id, password_hash, status FROM profiles WHERE email = $1`,
+    [email],
+  );
+  const profile = rows[0];
+  if (!profile || profile.status !== "active" || !profile.password_hash) {
+    go("/login", "Those details are not recognised.");
+  }
+  const ok = await checkPassword(password, profile.password_hash);
+  if (!ok) go("/login", "Those details are not recognised.");
+  await startSession(profile.id);
+  redirect("/area");
+}
+
+export async function logout() {
+  await clearSession();
+  redirect("/");
+}
+
+export async function requestReset(formData: FormData) {
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const { rows } = await pool.query<{ id: string; display_name: string }>(
+    `SELECT id, display_name FROM profiles WHERE email = $1 AND status = 'active'`,
+    [email],
+  );
+  const profile = rows[0];
+  if (profile) {
+    const { token, hash } = newToken();
+    await pool.query(
+      `INSERT INTO auth_tokens (profile_id, purpose, token_hash, expires_at)
+       VALUES ($1, 'reset', $2, now() + interval '2 hours')`,
+      [profile.id, hash],
+    );
+    await sendEmail({
+      to: [email],
+      subject: "Reset your nocap password",
+      text:
+        `Hello ${profile.display_name},\n\n` +
+        `Use this link to choose a new password. It expires in two hours.\n\n` +
+        `${appLink(`/reset/${token}`)}\n\n` +
+        `If you did not ask for this, you can ignore the message.\n`,
+    });
+  }
+  redirect("/reset?sent=1");
+}
+
+export async function setPasswordFromToken(formData: FormData) {
+  const token = String(formData.get("token") || "");
+  const purpose = String(formData.get("purpose") || "");
+  const password = String(formData.get("password") || "");
+  const problem = passwordProblem(password);
+  const back = purpose === "invite" ? `/join/${token}` : `/reset/${token}`;
+  if (problem) go(back, problem);
+  try {
+    const hash = await hashPassword(password);
+    const fn = purpose === "invite" ? "private.accept_invite" : "private.reset_password";
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT ${fn}($1, $2) AS id`,
+      [tokenHash(token), hash],
+    );
+    await startSession(rows[0].id);
+  } catch (error) {
+    go(back, errorMessage(error));
+  }
+  redirect("/area");
+}
+
+export async function updateProfile(formData: FormData) {
+  const user = await requireUser();
+  const displayName = String(formData.get("display_name") || "").trim();
+  if (!displayName) go("/area/profile", "Please enter your name.");
+  let photoKey = user.photo_key;
+  try {
+    const photo = await readUpload(formData.get("photo"), { maxBytes: 2 * 1024 * 1024, kinds: "image" });
+    if (photo) {
+      photoKey = `photos/${user.id}-${randomUUID()}.${photo.filename.split(".").pop()}`;
+      await storagePut(photoKey, photo.buffer, photo.mime);
+    }
+    await pool.query(
+      `UPDATE profiles SET
+         display_name = $2,
+         firm = $3,
+         city = $4,
+         practice_area = $5,
+         contacts = $6,
+         public_role = $7,
+         bio = $8,
+         jurisdiction = $9,
+         photo_key = $10,
+         updated_at = now()
+       WHERE id = $1`,
+      [
+        user.id,
+        displayName,
+        blank(formData.get("firm")),
+        blank(formData.get("city")),
+        blank(formData.get("practice_area")),
+        blank(formData.get("contacts")),
+        blank(formData.get("public_role")),
+        blank(formData.get("bio")),
+        blank(formData.get("jurisdiction")),
+        photoKey,
+      ],
+    );
+  } catch (error) {
+    go("/area/profile", errorMessage(error));
+  }
+  revalidatePath("/members");
+  revalidatePath("/area/profile");
+  redirect("/area/profile?saved=1");
+}
+
+export async function submitApplication(formData: FormData) {
+  if (String(formData.get("company_website") || "").trim()) {
+    redirect("/membership?sent=1");
+  }
+  const name = String(formData.get("name") || "").trim();
+  const firmAndCity = String(formData.get("firm_and_city") || "").trim();
+  const email = String(formData.get("email") || "").trim();
+  const proposing = blank(formData.get("proposing_member"));
+  const practice = String(formData.get("practice_description") || "").trim();
+  const privacy = formData.get("privacy") === "on";
+  if (!name || !firmAndCity || !email || !practice) {
+    go("/membership", "Please complete every required field.");
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) go("/membership", "Enter a valid email address.");
+  if (!privacy) go("/membership", "Please accept the privacy policy.");
+  try {
+    const cv = await readUpload(formData.get("cv"), { required: true, maxBytes: 5 * 1024 * 1024, kinds: "pdf" });
+    const id = randomUUID();
+    const cvKey = `applications/${id}/${cv!.filename}`;
+    await storagePut(cvKey, cv!.buffer, cv!.mime);
+    await pool.query(
+      `INSERT INTO applications
+         (id, name, firm_and_city, email, proposing_member, practice_description, cv_key, cv_filename, privacy_accepted)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
+      [id, name, firmAndCity, email, proposing, practice, cvKey, cv!.filename],
+    );
+    await sendEmail({
+      to: [env.foundingCommitteeEmail()],
+      subject: `Membership application — ${name}`,
+      text:
+        `A membership application has arrived.\n\n` +
+        `Name: ${name}\n` +
+        `Firm and city: ${firmAndCity}\n` +
+        `Email: ${email}\n` +
+        `Proposing member: ${proposing || "—"}\n\n` +
+        `Practice:\n${practice}\n\n` +
+        `The CV is stored with the application in the reserved area.\n` +
+        `${appLink(`/area/applications/${id}`)}\n`,
+    });
+  } catch (error) {
+    go("/membership", errorMessage(error));
+  }
+  redirect("/membership?sent=1");
+}
+
+export async function inviteMember(formData: FormData) {
+  const admin = await requireAdmin();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim();
+  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    go("/area/admin", "Enter a name and a valid email.");
+  }
+  const { token, hash } = newToken();
+  try {
+    await pool.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [
+      admin.id,
+      email,
+      name,
+      hash,
+    ]);
+    await sendEmail({
+      to: [email],
+      subject: "You are invited to nocap",
+      text:
+        `Hello ${name},\n\n` +
+        `You have been invited to the nocap members' area. Use the link below to choose a password. ` +
+        `It expires in 14 days.\n\n` +
+        `${appLink(`/join/${token}`)}\n\n` +
+        `There is no open signup. This link is only for you.\n`,
+    });
+  } catch (error) {
+    go("/area/admin", errorMessage(error));
+  }
+  revalidatePath("/area/admin");
+  redirect("/area/admin?invited=1");
+}
+
+export async function setMemberStatus(formData: FormData) {
+  const admin = await requireAdmin();
+  const target = String(formData.get("profile_id") || "");
+  const status = String(formData.get("status") || "");
+  try {
+    await pool.query(`SELECT private.set_member_status($1, $2, $3)`, [admin.id, target, status]);
+  } catch (error) {
+    go("/area/admin", errorMessage(error));
+  }
+  revalidatePath("/members");
+  revalidatePath("/area/admin");
+  redirect("/area/admin");
+}
+
+export async function uploadShared(formData: FormData) {
+  const user = await requireUser();
+  const title = String(formData.get("title") || "").trim();
+  if (!title) go("/area/documents?area=shared", "Give the document a title.");
+  try {
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const documentId = randomUUID();
+    const key = `documents/${documentId}/v1-${file!.filename}`;
+    await storagePut(key, file!.buffer, file!.mime);
+    await pool.query(
+      `INSERT INTO documents (id, area, category, title, created_by) VALUES ($1, 'shared', 'shared', $2, $3)`,
+      [documentId, title, user.id],
+    );
+    await pool.query(
+      `INSERT INTO document_versions
+         (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
+       VALUES ($1, 1, $2, $3, $4, $5, $6)`,
+      [documentId, key, file!.filename, file!.mime, file!.size, user.id],
+    );
+  } catch (error) {
+    go("/area/documents?area=shared", errorMessage(error));
+  }
+  revalidatePath("/area/documents");
+  redirect("/area/documents?area=shared");
+}
+
+export async function uploadSharedVersion(formData: FormData) {
+  const user = await requireUser();
+  const documentId = String(formData.get("document_id") || "");
+  const back = `/area/documents/${documentId}`;
+  try {
+    const { rows } = await pool.query<{ area: string; immutable: boolean }>(
+      `SELECT area, immutable FROM documents WHERE id = $1`,
+      [documentId],
+    );
+    const doc = rows[0];
+    if (!doc || doc.area !== "shared" || doc.immutable) throw new Error("That document cannot take a new version.");
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const { rows: numbers } = await pool.query<{ n: number }>(
+      `SELECT (coalesce(max(version_number), 0) + 1)::int AS n FROM document_versions WHERE document_id = $1`,
+      [documentId],
+    );
+    const version = numbers[0].n;
+    const key = `documents/${documentId}/v${version}-${file!.filename}`;
+    await storagePut(key, file!.buffer, file!.mime);
+    await pool.query(
+      `INSERT INTO document_versions
+         (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [documentId, version, key, file!.filename, file!.mime, file!.size, user.id],
+    );
+  } catch (error) {
+    go(back, errorMessage(error));
+  }
+  revalidatePath(back);
+  redirect(back);
+}
+
+export async function uploadRegister(formData: FormData) {
+  const admin = await requireAdmin();
+  const title = String(formData.get("title") || "").trim();
+  const category = String(formData.get("category") || "");
+  const existing = String(formData.get("document_id") || "");
+  if (!title && !existing) go("/area/documents", "Give the document a title.");
+  try {
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    let documentId = existing;
+    if (!documentId) {
+      const { rows } = await pool.query<{ id: string }>(
+        `SELECT private.create_register_document($1, $2, $3) AS id`,
+        [admin.id, category, title],
+      );
+      documentId = rows[0].id;
+    }
+    const key = `documents/${documentId}/${randomUUID()}-${file!.filename}`;
+    await storagePut(key, file!.buffer, file!.mime);
+    await pool.query(`SELECT private.add_register_version($1, $2, $3, $4, $5, $6)`, [
+      admin.id,
+      documentId,
+      key,
+      file!.filename,
+      file!.mime,
+      file!.size,
+    ]);
+  } catch (error) {
+    go("/area/documents", errorMessage(error));
+  }
+  revalidatePath("/area/documents");
+  redirect("/area/documents");
+}
+
+export async function askQuestion(formData: FormData) {
+  const user = await requireUser();
+  const title = String(formData.get("title") || "").trim();
+  const body = String(formData.get("body") || "").trim();
+  const deadlineRaw = String(formData.get("deadline") || "").trim();
+  if (!title || !body) go("/area/questions/new", "A question needs a title and a note.");
+  let deadline: Date | null = null;
+  if (deadlineRaw) {
+    deadline = parseClubDateTime(deadlineRaw);
+    if (deadline.getTime() <= Date.now()) go("/area/questions/new", "The deadline has to be in the future, or leave it blank.");
+  }
+  const id = randomUUID();
+  try {
+    await pool.query(
+      `INSERT INTO questions (id, author_id, title, body, deadline) VALUES ($1, $2, $3, $4, $5)`,
+      [id, user.id, title, body, deadline],
+    );
+    await saveAttachments(formData, "question", id, user.id);
+    const { rows } = await pool.query<{ email: string }>(
+      `SELECT email FROM profiles WHERE status = 'active'`,
+    );
+    await sendEmail({
+      to: rows.map((row) => row.email),
+      subject: `Question: ${title}`,
+      text:
+        `${user.display_name} opened a question.\n\n` +
+        `${title}\n\n${body}\n\n` +
+        (deadline ? `Deadline: ${deadline.toISOString()}\n\n` : "") +
+        `${appLink(`/area/questions/${id}`)}\n`,
+    });
+  } catch (error) {
+    go("/area/questions/new", errorMessage(error));
+  }
+  revalidatePath("/area");
+  redirect(`/area/questions/${id}`);
+}
+
+export async function replyToQuestion(formData: FormData) {
+  const user = await requireUser();
+  const questionId = String(formData.get("question_id") || "");
+  const body = String(formData.get("body") || "").trim();
+  const back = `/area/questions/${questionId}`;
+  if (!body) go(back, "Write a reply before sending.");
+  try {
+    const { rows: questions } = await pool.query<{ id: string; title: string; author_id: string }>(
+      `SELECT id, title, author_id FROM questions WHERE id = $1`,
+      [questionId],
+    );
+    const question = questions[0];
+    if (!question) go("/area/questions", "That question no longer exists.");
+    const commentId = randomUUID();
+    await pool.query(
+      `INSERT INTO question_comments (id, question_id, author_id, body) VALUES ($1, $2, $3, $4)`,
+      [commentId, questionId, user.id, body],
+    );
+    await saveAttachments(formData, "comment", commentId, user.id);
+    const { rows: people } = await pool.query<{ email: string; id: string }>(
+      `SELECT DISTINCT p.email, p.id
+       FROM profiles p
+       WHERE p.status = 'active' AND (
+         p.id = $2 OR p.id IN (SELECT author_id FROM question_comments WHERE question_id = $1)
+       )`,
+      [questionId, question.author_id],
+    );
+    await sendEmail({
+      to: people.filter((person) => person.id !== user.id).map((person) => person.email),
+      subject: `Reply: ${question.title}`,
+      text:
+        `${user.display_name} replied.\n\n${body}\n\n${appLink(back)}\n`,
+    });
+  } catch (error) {
+    go(back, errorMessage(error));
+  }
+  revalidatePath(back);
+  redirect(back);
+}
+
+export async function remindQuestion(formData: FormData) {
+  const user = await requireUser();
+  const questionId = String(formData.get("question_id") || "");
+  const { rows } = await pool.query<{ title: string; author_id: string; body: string }>(
+    `SELECT title, author_id, body FROM questions WHERE id = $1`,
+    [questionId],
+  );
+  const question = rows[0];
+  if (!question || question.author_id !== user.id) {
+    go(`/area/questions/${questionId}`, "Only the member who opened the question can send a reminder.");
+  }
+  const { rows: people } = await pool.query<{ email: string }>(
+    `SELECT email FROM profiles WHERE status = 'active'`,
+  );
+  await sendEmail({
+    to: people.map((person) => person.email),
+    subject: `Reminder: ${question.title}`,
+    text:
+      `${user.display_name} asked for a reply.\n\n${question.title}\n\n${question.body}\n\n` +
+      `${appLink(`/area/questions/${questionId}`)}\n`,
+  });
+  redirect(`/area/questions/${questionId}?reminded=1`);
+}
+
+export async function openVote(formData: FormData) {
+  const admin = await requireAdmin();
+  const subject = String(formData.get("subject") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+  const deadlineRaw = String(formData.get("deadline") || "").trim();
+  const qc = Number(formData.get("quorum_constitutive"));
+  const qd = Number(formData.get("quorum_deliberative"));
+  if (!subject || !description || !deadlineRaw) go("/area/votes/new", "Subject, description and deadline are required.");
+  if (!Number.isFinite(qc) || !Number.isFinite(qd) || qc < 0 || qc > 100 || qd < 0 || qd > 100) {
+    go("/area/votes/new", "Both quorums are percentages from 0 to 100.");
+  }
+  let voteId = "";
+  try {
+    const deadline = parseClubDateTime(deadlineRaw);
+    const { rows } = await pool.query<{ id: string }>(
+      `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
+      [admin.id, subject, description, deadline, qc, qd],
+    );
+    voteId = rows[0].id;
+    await saveAttachments(formData, "vote", voteId, admin.id);
+    const { rows: people } = await pool.query<{ email: string }>(
+      `SELECT p.email FROM vote_electorate e JOIN profiles p ON p.id = e.profile_id WHERE e.vote_id = $1`,
+      [voteId],
+    );
+    await sendEmail({
+      to: people.map((person) => person.email),
+      subject: `Vote open: ${subject}`,
+      text:
+        `A vote is open.\n\n${subject}\n\n${description}\n\n` +
+        `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
+        `Deliberative quorum: ${qd}% of votes cast in favour.\n` +
+        `Deadline: ${deadline.toISOString()}\n\n` +
+        `The vote is open: every member can see who voted what. A vote cannot be changed once cast.\n\n` +
+        `${appLink(`/area/votes/${voteId}`)}\n`,
+    });
+  } catch (error) {
+    go("/area/votes/new", errorMessage(error));
+  }
+  revalidatePath("/area");
+  redirect(`/area/votes/${voteId}`);
+}
+
+export async function castVote(formData: FormData) {
+  const user = await requireUser();
+  await closeDueVotes();
+  const voteId = String(formData.get("vote_id") || "");
+  const choice = String(formData.get("choice") || "");
+  const back = `/area/votes/${voteId}`;
+  if (!["for", "against", "abstain"].includes(choice)) go(back, "Choose for, against or abstain.");
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM vote_electorate WHERE vote_id = $1 AND profile_id = $2`,
+      [voteId, user.id],
+    );
+    if (!rows[0]) go(back, "You are not on the list of eligible voters for this vote.");
+    await pool.query(
+      `INSERT INTO ballots (vote_id, voter_id, choice) VALUES ($1, $2, $3)`,
+      [voteId, user.id, choice],
+    );
+  } catch (error) {
+    const message = errorMessage(error);
+    if (/duplicate key/i.test(message)) go(back, "You have already voted. A vote cannot be changed.");
+    go(back, message);
+  }
+  revalidatePath(back);
+  redirect(back);
+}
+
+export async function remindVoters(formData: FormData) {
+  const admin = await requireAdmin();
+  await closeDueVotes();
+  const voteId = String(formData.get("vote_id") || "");
+  const { rows: votes } = await pool.query<{ subject: string; status: string }>(
+    `SELECT subject, status FROM votes WHERE id = $1`,
+    [voteId],
+  );
+  const vote = votes[0];
+  if (!vote || vote.status !== "open") go(`/area/votes/${voteId}`, "This vote is not open.");
+  const { rows } = await pool.query<{ email: string }>(
+    `SELECT p.email
+     FROM vote_electorate e
+     JOIN profiles p ON p.id = e.profile_id
+     WHERE e.vote_id = $1
+       AND NOT EXISTS (SELECT 1 FROM ballots b WHERE b.vote_id = e.vote_id AND b.voter_id = e.profile_id)`,
+    [voteId],
+  );
+  if (rows.length === 0) go(`/area/votes/${voteId}`, "Everyone eligible has voted.");
+  await sendEmail({
+    to: rows.map((row) => row.email),
+    subject: `Reminder: ${vote.subject}`,
+    text:
+      `${admin.display_name} asked members who have not yet voted to do so.\n\n` +
+      `${vote.subject}\n\n${appLink(`/area/votes/${voteId}`)}\n`,
+  });
+  redirect(`/area/votes/${voteId}?reminded=1`);
+}
+
+export async function createPublication(formData: FormData) {
+  const admin = await requireAdmin();
+  const title = String(formData.get("title") || "").trim();
+  const category = String(formData.get("category") || "").trim();
+  const summary = String(formData.get("summary") || "").trim();
+  const body = String(formData.get("body") || "").trim();
+  const authorId = String(formData.get("author_id") || "") || null;
+  const published = String(formData.get("published_on") || "");
+  if (!title || !category || !summary || !body || !published) {
+    go("/area/publications/new", "Title, category, summary, text and date are required.");
+  }
+  const slug = slugify(title);
+  let pdfKey: string | null = null;
+  try {
+    const pdf = await readUpload(formData.get("pdf"), { maxBytes: 15 * 1024 * 1024, kinds: "pdf" });
+    if (pdf) {
+      pdfKey = `publications/${slug}-${pdf.filename}`;
+      await storagePut(pdfKey, pdf.buffer, pdf.mime);
+    }
+    await pool.query(
+      `SELECT private.create_publication($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [admin.id, slug, title, category, summary, body, authorId, published, pdfKey],
+    );
+  } catch (error) {
+    go("/area/publications/new", errorMessage(error));
+  }
+  revalidatePath("/publications");
+  redirect(`/publications/${slug}`);
+}
+
+async function saveAttachments(formData: FormData, parentType: string, parentId: string, userId: string) {
+  const entries = formData.getAll("attachments");
+  for (const entry of entries) {
+    const file = await readUpload(entry, { maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    if (!file) continue;
+    const key = `attachments/${parentType}/${parentId}/${randomUUID()}-${safeFilename(file.filename)}`;
+    await storagePut(key, file.buffer, file.mime);
+    await pool.query(
+      `INSERT INTO attachments (parent_type, parent_id, storage_key, filename, mime_type, byte_size, uploaded_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [parentType, parentId, key, file.filename, file.mime, file.size, userId],
+    );
+  }
+}
+
+function blank(value: FormDataEntryValue | null): string | null {
+  const text = String(value || "").trim();
+  return text ? text : null;
+}
+
+function slugify(title: string): string {
+  const slug = title
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+  return slug || `note-${Date.now()}`;
+}
+
+export async function refreshClosedVotes() {
+  const user = await getCurrentUser();
+  if (!user) return;
+  await closeDueVotes();
+}

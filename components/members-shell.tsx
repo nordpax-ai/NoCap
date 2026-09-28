@@ -1,0 +1,82 @@
+import Link from "next/link";
+import { logout } from "@/lib/actions";
+import { initials, type Member } from "@/lib/auth";
+
+const LINKS = [
+  { href: "/area", label: "Dashboard" },
+  { href: "/area/documents", label: "Documents" },
+  { href: "/area/questions", label: "Questions" },
+  { href: "/area/votes", label: "Votes" },
+  { href: "/area/profile", label: "Profile" },
+  { href: "/area/applications", label: "Applications" },
+  { href: "/area/export", label: "Export" },
+];
+
+export function MembersShell({
+  user,
+  pathname,
+  children,
+}: {
+  user: Member;
+  pathname: string;
+  children: React.ReactNode;
+}) {
+  const links = user.role === "admin" ? [...LINKS, { href: "/area/admin", label: "Admin" }] : LINKS;
+  return (
+    <div className="mem">
+      <div className="wrap">
+        <header>
+          <div className="bar">
+            <Link href="/area" aria-label="nocap members' area">
+              <img className="mark-img" src="/brand/mark-navy.png" alt="nocap" />
+            </Link>
+            <div className="me">
+              <Link href="/area/profile">
+                <span className="name">{user.display_name}</span>
+              </Link>
+              <Link href="/area/profile" className="avatar" aria-label="Your profile">
+                {user.photo_key ? (
+                  <img src={`/api/photos/${user.id}`} alt="" />
+                ) : (
+                  initials(user.display_name)
+                )}
+              </Link>
+              <form action={logout}>
+                <button className="act" type="submit">Sign out</button>
+              </form>
+            </div>
+          </div>
+          <nav className="subnav" aria-label="Members' area">
+            {links.map((link) => {
+              const on = link.href === "/area" ? pathname === "/area" : pathname === link.href || pathname.startsWith(`${link.href}/`);
+              return (
+                <Link key={link.href} href={link.href} className={on ? "on" : undefined}>
+                  {link.label}
+                </Link>
+              );
+            })}
+          </nav>
+        </header>
+        {children}
+        <p className="foot">
+          Email is how nocap reaches members. Votes are recorded with the time they were cast and cannot be changed once submitted.
+          {" "}
+          <Link href="/">Public site</Link>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function DocIcon({ folder = false }: { folder?: boolean }) {
+  return folder ? (
+    <svg className="ico" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M2 5h6l2 2h8v10H2z" />
+    </svg>
+  ) : (
+    <svg className="ico" viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M5 2h7l3 3v13H5z" />
+      <path d="M12 2v4h3" />
+    </svg>
+  );
+}

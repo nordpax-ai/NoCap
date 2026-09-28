@@ -1,6 +1,8 @@
 node_modules
 .next
+.netlify
 var
+deno.lock
 .env
 .env.local
 .env.*.local

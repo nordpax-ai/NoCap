@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { logout } from "@/lib/actions";
 import { initials, type Member } from "@/lib/auth";
+import { env } from "@/lib/env";
 
 const LINKS = [
   { href: "/area", label: "Dashboard" },
@@ -21,15 +22,24 @@ export function MembersShell({
   pathname: string;
   children: React.ReactNode;
 }) {
-  const links = user.role === "admin" ? [...LINKS, { href: "/area/admin", label: "Admin" }] : LINKS;
+  const links =
+    user.role === "admin"
+      ? [...LINKS, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/outbox", label: "Outbox" }]
+      : LINKS;
+  const active = links
+    .filter((link) => (link.href === "/area" ? pathname === "/area" : pathname === link.href || pathname.startsWith(`${link.href}/`)))
+    .sort((a, b) => b.href.length - a.href.length)[0];
   return (
     <div className="mem">
       <div className="wrap">
         <header>
           <div className="bar">
-            <Link href="/area" aria-label="nocap members' area">
-              <img className="mark-img" src="/brand/mark-navy.png" alt="nocap" />
-            </Link>
+            <div className="brand">
+              <Link href="/area" aria-label="nocap members' area">
+                <img className="mark-img" src="/brand/mark-navy.png" alt="nocap" />
+              </Link>
+              {env.demoMode() ? <span className="demo-flag">Demo · example data</span> : null}
+            </div>
             <div className="me">
               <Link href="/area/profile">
                 <span className="name">{user.display_name}</span>
@@ -48,7 +58,7 @@ export function MembersShell({
           </div>
           <nav className="subnav" aria-label="Members' area">
             {links.map((link) => {
-              const on = link.href === "/area" ? pathname === "/area" : pathname === link.href || pathname.startsWith(`${link.href}/`);
+              const on = active?.href === link.href;
               return (
                 <Link key={link.href} href={link.href} className={on ? "on" : undefined}>
                   {link.label}

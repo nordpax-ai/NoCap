@@ -1,0 +1,19 @@
+# Client demo on Netlify. Replaces the static preview.
+# The Next.js runtime (OpenNext, @netlify/plugin-nextjs v5) is pinned here
+# so this site does not drift onto the legacy runtime.
+
+[build]
+  command = "npm run db:deploy && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22.14.0"
+  DEMO_MODE = "1"
+  EMAIL_PROVIDER = "log"
+  STORAGE_DRIVER = "netlify-blobs"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  node_bundler = "esbuild"

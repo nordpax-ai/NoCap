@@ -2,8 +2,10 @@ import { randomBytes, createHash } from "crypto";
 import { mkdir, writeFile, rm } from "fs/promises";
 import path from "path";
 import bcrypt from "bcryptjs";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { env } from "../lib/env";
+import { storagePut } from "../lib/storage";
 import { loadEnv } from "./load-env";
 
 loadEnv();
@@ -132,21 +134,49 @@ const publications = [
   ["cross-border-nordic-habits", "Cross-border", "Nordic sellers, continental buyers: five habits that clash", "Disclosure culture, warranty expectations and the meaning of \"agreed form\" travel worse than anyone expects.", "Erik Lindqvist", "2025-12-11", false],
 ] as const;
 
-async function main() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL_OWNER });
-  const storageDir = process.env.STORAGE_LOCAL_DIR || "./var/storage";
-  await rm(storageDir, { recursive: true, force: true });
-  await rm(path.join("var", "emails"), { recursive: true, force: true });
-  await mkdir(storageDir, { recursive: true });
-  await mkdir(path.join("var", "emails"), { recursive: true });
+export async function seedDatabase(options: { reset: boolean }): Promise<void> {
+  const pool = new Pool({ connectionString: env.ownerDatabaseUrl(), max: 1 });
+  const client = await pool.connect();
+  try {
+    await client.query(`SELECT pg_advisory_lock(48291001)`);
+    if (!options.reset) {
+      const existing = await client.query(`SELECT 1 FROM profiles WHERE email = $1`, [
+        "paolo.piccirilli@example.invalid",
+      ]);
+      if (existing.rowCount) {
+        console.log("Demo data already present. Seed skipped.");
+        return;
+      }
+    }
+    await client.query("BEGIN");
+    await client.query(`SELECT set_config('nocap.register_write', 'on', true)`);
+    await writeSeed(client, options.reset);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
 
-  await pool.query(`
+async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
+  const storageDir = process.env.STORAGE_LOCAL_DIR || "./var/storage";
+  if (reset && env.storageDriver() === "local") {
+    await rm(storageDir, { recursive: true, force: true });
+    await rm(path.join("var", "emails"), { recursive: true, force: true });
+    await mkdir(storageDir, { recursive: true });
+    await mkdir(path.join("var", "emails"), { recursive: true });
+  }
+
+  await client.query(`
     TRUNCATE
       resolutions, ballots, vote_electorate, votes,
       attachments, question_comments, questions,
       document_versions, documents,
       publications, applications,
-      auth_tokens, sessions, profiles
+      auth_tokens, sessions, profiles, email_log
     RESTART IDENTITY CASCADE
   `);
 
@@ -154,7 +184,7 @@ async function main() {
   const ids = new Map<string, string>();
 
   for (const person of people) {
-    const { rows } = await pool.query<{ id: string }>(
+    const { rows } = await client.query<{ id: string }>(
       `INSERT INTO profiles (
          email, password_hash, role, status, display_name, firm, city, jurisdiction,
          public_role, practice_area, bio, contacts, is_example
@@ -180,13 +210,11 @@ async function main() {
   const adminId = ids.get("Paolo Piccirilli")!;
 
   async function putText(key: string, text: string) {
-    const full = path.join(storageDir, key);
-    await mkdir(path.dirname(full), { recursive: true });
-    await writeFile(full, text);
+    await storagePut(key, Buffer.from(text), "text/plain");
   }
 
   async function addRegister(category: string, title: string, versions: { name: string; text: string; at: string }[]) {
-    const { rows } = await pool.query<{ id: string }>(
+    const { rows } = await client.query<{ id: string }>(
       `INSERT INTO documents (area, category, title, created_by, immutable, created_at)
        VALUES ('register', $1, $2, $3, $4, $5) RETURNING id`,
       [category, title, adminId, category === "resolution", versions[0].at],
@@ -196,7 +224,7 @@ async function main() {
     for (const version of versions) {
       const key = `documents/${documentId}/v${n}-${version.name}`;
       await putText(key, version.text);
-      await pool.query(
+      await client.query(
         `INSERT INTO document_versions
            (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
          VALUES ($1,$2,$3,$4,'text/plain',$5,$6,$7)`,
@@ -227,7 +255,7 @@ async function main() {
     { name: "resolution.txt", text: exampleNote + "An uploaded resolution. It cannot be edited or deleted.\n", at: "2026-08-18T12:00:00Z" },
   ]);
 
-  const sharedId = (await pool.query<{ id: string }>(
+  const sharedId = (await client.query<{ id: string }>(
     `INSERT INTO documents (area, category, title, created_by, created_at)
      VALUES ('shared', 'shared', 'Example note on leakage drafting', $1, '2026-03-12T09:00:00Z')
      RETURNING id`,
@@ -236,7 +264,7 @@ async function main() {
   const sharedKey = `documents/${sharedId}/v1-note.txt`;
   const sharedText = "EXAMPLE. A shared note, not a publication and not a resolution.\n";
   await putText(sharedKey, sharedText);
-  await pool.query(
+  await client.query(
     `INSERT INTO document_versions
        (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
      VALUES ($1, 1, $2, 'note.txt', 'text/plain', $3, $4, '2026-03-12T09:00:00Z')`,
@@ -252,23 +280,20 @@ async function main() {
       page.drawText("EXAMPLE PUBLICATION — not a real article.", { x: 54, y: 760, size: 14, font });
       page.drawText(title, { x: 54, y: 730, size: 12, font });
       pdfKey = `publications/${slug}.pdf`;
-      const bytes = await doc.save();
-      const full = path.join(storageDir, pdfKey);
-      await mkdir(path.dirname(full), { recursive: true });
-      await writeFile(full, Buffer.from(bytes));
+      await storagePut(pdfKey, Buffer.from(await doc.save()), "application/pdf");
     }
     const body =
       "Example text from the design mockup. This is not a real publication.\n\n" +
       summary +
       "\n\nThe detail format — this page, and an optional PDF — is a placeholder. It is still an open decision.";
-    await pool.query(
+    await client.query(
       `INSERT INTO publications (slug, title, category, summary, body, author_id, published_on, pdf_key, is_example)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)`,
       [slug, title, category, summary, body, ids.get(author), published, pdfKey],
     );
   }
 
-  const questionId = (await pool.query<{ id: string }>(
+  const questionId = (await client.query<{ id: string }>(
     `INSERT INTO questions (author_id, title, body, created_at)
      VALUES ($1, $2, $3, '2026-08-24T09:00:00Z') RETURNING id`,
     [
@@ -277,14 +302,14 @@ async function main() {
       "Example question. Where should the annual meeting be held, and does anyone have a room we can use without a fee?",
     ],
   )).rows[0].id;
-  await pool.query(
+  await client.query(
     `INSERT INTO question_comments (question_id, author_id, body, created_at) VALUES
        ($1, $2, 'Example reply. Lisbon is easy to reach and I can ask about a room.', '2026-08-24T11:00:00Z'),
        ($1, $3, 'Example reply from a member who later left. This comment stays in the thread.', '2026-08-24T15:00:00Z')`,
     [questionId, ids.get("Lukas Brandt"), ids.get("Clara Example")],
   );
 
-  const openQuestion = (await pool.query<{ id: string }>(
+  const openQuestion = (await client.query<{ id: string }>(
     `INSERT INTO questions (author_id, title, body, deadline, created_at)
      VALUES ($1, $2, $3, now() + interval '21 days', now() - interval '2 days') RETURNING id`,
     [
@@ -293,7 +318,7 @@ async function main() {
       "Example question with a deadline. Reply if you would read a short note on warranty insurance.",
     ],
   )).rows[0].id;
-  await pool.query(
+  await client.query(
     `INSERT INTO question_comments (question_id, author_id, body) VALUES ($1, $2, 'Example reply. I would read it.')`,
     [openQuestion, ids.get("Erik Lindqvist")],
   );
@@ -307,19 +332,19 @@ async function main() {
     votes: { name: string; choice: "for" | "against" | "abstain"; at?: string }[];
     close?: { opened: string; closed: string };
   }) {
-    const { rows } = await pool.query<{ id: string }>(
+    const { rows } = await client.query<{ id: string }>(
       `SELECT private.open_vote($1, $2, $3, $4::timestamptz, $5, $6) AS id`,
       [adminId, options.subject, options.description, options.deadline, options.qc, options.qd],
     );
     const voteId = rows[0].id;
     for (const vote of options.votes) {
-      await pool.query(
+      await client.query(
         `INSERT INTO ballots (vote_id, voter_id, choice, cast_at) VALUES ($1, $2, $3, coalesce($4::timestamptz, now()))`,
         [voteId, ids.get(vote.name), vote.choice, vote.at ?? null],
       );
     }
     if (options.close) {
-      await pool.query(`SELECT private.seed_close_vote($1, $2::timestamptz, $3::timestamptz)`, [
+      await client.query(`SELECT private.seed_close_vote($1, $2::timestamptz, $3::timestamptz)`, [
         voteId,
         options.close.opened,
         options.close.closed,
@@ -343,7 +368,7 @@ async function main() {
     close: { opened: "2026-08-18T09:00:00Z", closed: "2026-08-18T18:00:00Z" },
   });
 
-  await pool.query(`SELECT private.set_member_status($1, $2, 'deactivated')`, [
+  await client.query(`SELECT private.set_member_status($1, $2, 'deactivated')`, [
     adminId,
     ids.get("Clara Example"),
   ]);
@@ -376,36 +401,46 @@ async function main() {
 
   const inviteToken = randomBytes(32).toString("base64url");
   const inviteHash = createHash("sha256").update(inviteToken).digest("hex");
-  await pool.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [
+  await client.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [
     adminId,
     "new.member@example.invalid",
     "New Example",
     inviteHash,
   ]);
-  const inviteUrl = `${process.env.APP_URL || "http://localhost:3000"}/join/${inviteToken}`;
-  await writeFile(
-    path.join("var", "emails", "000-seed-invite.json"),
-    JSON.stringify(
-      {
-        id: "seed-invite",
-        at: new Date().toISOString(),
-        to: ["new.member@example.invalid"],
-        subject: "You are invited to nocap",
-        text: `Hello New Example,\n\nYou have been invited to the nocap members' area.\n\n${inviteUrl}\n`,
-      },
-      null,
-      2,
-    ),
+  const inviteUrl = `${env.appUrl()}/join/${inviteToken}`;
+  const inviteText = `Hello New Example,\n\nYou have been invited to the nocap members' area.\n\n${inviteUrl}\n`;
+  await client.query(
+    `INSERT INTO email_log (id, created_at, recipients, subject, body) VALUES ($1, now(), $2, $3, $4)`,
+    ["seed-invite", ["new.member@example.invalid"], "You are invited to nocap", inviteText],
   );
+  if (env.storageDriver() === "local") {
+    await mkdir(path.join("var", "emails"), { recursive: true });
+    await writeFile(
+      path.join("var", "emails", "000-seed-invite.json"),
+      JSON.stringify(
+        {
+          id: "seed-invite",
+          at: new Date().toISOString(),
+          to: ["new.member@example.invalid"],
+          subject: "You are invited to nocap",
+          text: inviteText,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 
-  await pool.end();
   console.log("Seeded example data.");
   console.log(`Admin login: paolo.piccirilli@example.invalid / ${PASSWORD}`);
   console.log(`Member login: elena.rossi@example.invalid / ${PASSWORD}`);
   console.log(`Pending invite: ${inviteUrl}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const entry = process.argv[1] || "";
+if (entry.endsWith("seed.ts") || entry.endsWith("seed.js")) {
+  seedDatabase({ reset: true }).catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

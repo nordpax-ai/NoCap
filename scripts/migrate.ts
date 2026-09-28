@@ -1,12 +1,13 @@
 import { readdirSync, readFileSync } from "fs";
 import path from "path";
 import { Pool } from "pg";
+import { env } from "../lib/env";
 import { loadEnv } from "./load-env";
 
 loadEnv();
 
-async function main() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL_OWNER });
+export async function migrate(): Promise<void> {
+  const pool = new Pool({ connectionString: env.ownerDatabaseUrl(), max: 1 });
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id text PRIMARY KEY,
@@ -30,7 +31,10 @@ async function main() {
   console.log("migrations done");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const entry = process.argv[1] || "";
+if (entry.endsWith("migrate.ts") || entry.endsWith("migrate.js")) {
+  migrate().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

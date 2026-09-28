@@ -8,7 +8,10 @@ const globalForPg = globalThis as unknown as { pool?: Pool };
 
 export const pool =
   globalForPg.pool ??
-  new Pool({ connectionString: env.databaseUrl(), max: 10 });
+  new Pool({
+    connectionString: env.databaseUrl(),
+    max: process.env.NETLIFY === "true" ? 1 : 10,
+  });
 
 if (process.env.NODE_ENV !== "production") globalForPg.pool = pool;
 

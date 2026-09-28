@@ -10,7 +10,7 @@ The functional specification is the source of truth. The public site and the res
 - **PostgreSQL** for every record. The web process connects as `nocap_app`. Migrations and the seed connect as `nocap_owner`. Row Level Security allows only `nocap_app`. A future Supabase Data API, if pointed at this database, does not grant `anon` or `authenticated` any access.
 - **Application sessions**, not a hosted auth product. An admin invites a member. The member sets a password from the email link. Password reset uses the same kind of link. This keeps the club off a single vendor's auth service.
 - **Files** on local disk, or on any S3-compatible store (including Supabase Storage in an EU project).
-- **Email** through a small adapter. `log` writes each message to `var/emails` and shows it at `/dev/mail` in development. `smtp` sends through any provider.
+- **Email** through a small adapter. `log` stores each message in the database (and in `var/emails` when the disk is writable). An admin reads them in the reserved area. `smtp` sends through any provider.
 
 Postgres, the files and the mail adapter can all live in the EU. A full export is a zip of the documents and the resolutions register. Nothing required to read that archive lives only inside a vendor console.
 
@@ -42,7 +42,7 @@ Seeded people are examples. They are not real biographies.
 
 Clara Example is deactivated. She stays in the historical vote and in a question thread, and she does not appear on the public members page. A pending invite is written to `var/emails/000-seed-invite.json`.
 
-Logged messages are listed at http://localhost:3000/dev/mail while `EMAIL_PROVIDER=log` and the app is not in production.
+Logged messages are listed at http://localhost:3000/dev/mail while `EMAIL_PROVIDER=log` and the app is not in production. The same log is in the reserved area at `/area/admin/outbox` (also `/admin/outbox`).
 
 ### What the seed contains
 
@@ -62,12 +62,65 @@ Sign-in is at `/login`. There is no open signup.
 - **Documents.** Official register (admin uploads) and shared folder (any member uploads). Versions, title search, download, and a zip of the ticked files.
 - **Questions.** Any member opens one. Replies are comments, with attachments and an optional deadline. Opening emails every active member. A reply emails the people already in the thread. The author can send a reminder.
 - **Votes.** An admin opens a vote with a subject, a description, attachments, a deadline, and two quorums. Eligible voters are the active members at that moment, and the list does not change. Choices are For, Against and Abstain. The vote is open: everyone can see who voted what. A ballot cannot be edited. While the vote is open the page shows who has voted, who has not, and the deadline. The admin can remind people who have not voted.
-- **Close.** At the deadline the vote closes (on the next visit to the reserved area, on a full export, or via `POST /api/jobs/close-votes` with `Authorization: Bearer $CRON_SECRET`). Constitutive quorum is the share of eligible voters who cast a ballot. Abstentions count as participation. Deliberative quorum is the share of For among votes cast, and abstentions are part of that count. If the constitutive quorum is not met, the outcome is invalid. The page states the outcome and the counts. It does not interpret them.
+- **Close.** At the deadline the vote closes when someone next opens the reserved area, downloads a record, or runs a full export, and on Netlify a scheduled function closes due votes every 10 minutes. Constitutive quorum is the share of eligible voters who cast a ballot. Abstentions count as participation. Deliberative quorum is the share of For among votes cast, and abstentions are part of that count. If the constitutive quorum is not met, the outcome is invalid. The page states the outcome and the counts. It does not interpret them.
 - **Record.** Each closed vote has a PDF: subject, eligible voters, each named vote with the time it was cast, the quorums, and the outcome.
 - **Applications.** The public membership form emails the Founding Committee and stores the application, including the CV, for members.
 - **Export.** `/area/export` downloads every document version and the resolutions register.
 
 Closed votes and resolutions cannot be updated or deleted, including by the database owner. That is enforced with triggers and grants, not only by hiding buttons.
+
+## Netlify demo
+
+This is the client demo that replaces the static site `nocap-preview.netlify.app`. It is not the production EU deployment below. Nothing in this repository deploys itself.
+
+The build uses the current Netlify Next.js runtime (`@netlify/plugin-nextjs` 5.16.0, the OpenNext adapter) and Node `22.14.0`, both set in `netlify.toml`. Each build runs `npm run db:deploy`, which migrates and, only when the database is empty, loads the demo. A second build does not wipe votes or members.
+
+### Environment variables
+
+Set these in the Netlify UI (**Site configuration → Environment variables**) so they exist at runtime as well as during the build. `netlify.toml` already sets `DEMO_MODE`, `EMAIL_PROVIDER` and `STORAGE_DRIVER` for the build. Repeat them in the UI so the running functions see them.
+
+| Variable | Value |
+| --- | --- |
+| `NETLIFY_DATABASE_URL` | Injected when Netlify DB is enabled. If the product sets `NETLIFY_DB_URL` instead, that is read too. `DATABASE_URL` is the fallback. Do not set `DATABASE_URL_OWNER` on Netlify. |
+| `STORAGE_DRIVER` | `netlify-blobs` |
+| `EMAIL_PROVIDER` | `log` |
+| `DEMO_MODE` | `1` |
+| `APP_TIMEZONE` | `Europe/Rome` |
+| `CRON_SECRET` | A long random string. Optional. The scheduled closer calls Postgres directly and does not need it. `POST /api/jobs/close-votes` still expects `Authorization: Bearer` this value, or `change-me` if it is unset. |
+| `FOUNDING_COMMITTEE_EMAIL` | `founding-committee@nocap-law.com` (placeholder) |
+| `CONTACT_EMAIL` | `contact@nocap-law.com` (placeholder) |
+| `EMAIL_FROM` | `nocap <noreply@nocap-law.com>` |
+
+Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`.
+
+Do not set `DATABASE_URL` to the local `nocap_app` string. The Neon role owns the tables. It is not a superuser. Closed votes, ballots and resolutions stay immutable because the triggers reject the change for every role, including the table owner.
+
+### Deploy steps
+
+1. Create a Netlify site from this repository. The build command and publish directory come from `netlify.toml` (`npm run db:deploy && npm run build`, publish `.next`).
+2. Enable **Netlify DB** (Neon Postgres) on the site and let it inject `NETLIFY_DATABASE_URL` or `NETLIFY_DB_URL`.
+3. Set the environment variables in the table above. `STORAGE_DRIVER=netlify-blobs` selects the Blobs adapter. The store name is `nocap-files`.
+4. Deploy. The first build migrates and seeds. Later builds migrate and skip the seed.
+5. Open the site, sign in, and use **Outbox** for invite links. They point at the deployed URL.
+
+Demo sign-in after seeding:
+
+| Who | Email | Password |
+| --- | --- | --- |
+| Admin | `paolo.piccirilli@example.invalid` | `example-password` |
+| Member | `elena.rossi@example.invalid` | `example-password` |
+
+Votes close in two ways. A scheduled function, `netlify/functions/close-votes.ts`, runs every 10 minutes and calls `private.close_due_votes()`. Opening the reserved area, or downloading a vote record, also closes anything that is already due. The reserved area shows a small **Demo · example data** marker.
+
+Logged mail is not sent. The admin reads it at `/area/admin/outbox`.
+
+### Run the same steps locally
+
+```bash
+npm run db:deploy
+```
+
+That uses `DATABASE_URL_OWNER` when it is set, otherwise `NETLIFY_DATABASE_URL`. It is safe to run twice.
 
 ## Deploy in the EU
 

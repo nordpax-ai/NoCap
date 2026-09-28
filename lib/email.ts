@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
+import { pool } from "./db";
 import { env } from "./env";
 
 export type EmailMessage = {
@@ -20,13 +21,22 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
 }
 
 async function logEmail(message: EmailMessage): Promise<void> {
-  const dir = path.join(process.cwd(), "var", "emails");
-  await mkdir(dir, { recursive: true });
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  await writeFile(
-    path.join(dir, `${id}.json`),
-    JSON.stringify({ id, at: new Date().toISOString(), ...message }, null, 2),
+  const at = new Date().toISOString();
+  await pool.query(
+    `INSERT INTO email_log (id, created_at, recipients, subject, body) VALUES ($1, $2, $3, $4, $5)`,
+    [id, at, message.to, message.subject, message.text],
   );
+  try {
+    const dir = path.join(process.cwd(), "var", "emails");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, `${id}.json`),
+      JSON.stringify({ id, at, ...message }, null, 2),
+    );
+  } catch {
+    // The Netlify function filesystem is not a shared mailbox. The database row is the log.
+  }
 }
 
 async function sendSmtp(message: EmailMessage): Promise<void> {

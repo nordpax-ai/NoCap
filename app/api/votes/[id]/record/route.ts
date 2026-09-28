@@ -1,9 +1,10 @@
 import { requireUser } from "@/lib/auth";
 import { downloadResponse } from "@/lib/export";
-import { ensureVotePdf } from "@/lib/votes";
+import { closeDueVotes, ensureVotePdf } from "@/lib/votes";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   await requireUser();
+  await closeDueVotes();
   const { id } = await params;
   try {
     const pdf = await ensureVotePdf(id);

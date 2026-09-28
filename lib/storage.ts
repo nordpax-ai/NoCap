@@ -15,9 +15,20 @@ function assertKey(key: string): string {
   return key;
 }
 
+async function blobStore() {
+  const { getStore } = await import("@netlify/blobs");
+  return getStore({ name: "nocap-files", consistency: "strong" });
+}
+
 export async function storagePut(key: string, body: Buffer, contentType: string): Promise<void> {
   const safe = assertKey(key);
-  if (env.storageProvider() === "s3") {
+  if (env.storageDriver() === "netlify-blobs") {
+    const store = await blobStore();
+    const bytes = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
+    await store.set(safe, bytes, { metadata: { contentType } });
+    return;
+  }
+  if (env.storageDriver() === "s3") {
     const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
     const cfg = env.s3();
     const client = new S3Client({
@@ -43,7 +54,13 @@ export async function storagePut(key: string, body: Buffer, contentType: string)
 
 export async function storageGet(key: string): Promise<Buffer> {
   const safe = assertKey(key);
-  if (env.storageProvider() === "s3") {
+  if (env.storageDriver() === "netlify-blobs") {
+    const store = await blobStore();
+    const data = await store.get(safe, { type: "arrayBuffer" });
+    if (!data) throw new Error("Empty object");
+    return Buffer.from(data);
+  }
+  if (env.storageDriver() === "s3") {
     const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
     const cfg = env.s3();
     const client = new S3Client({
@@ -62,7 +79,12 @@ export async function storageGet(key: string): Promise<Buffer> {
 
 export async function storageExists(key: string): Promise<boolean> {
   try {
-    if (env.storageProvider() === "s3") {
+    if (env.storageDriver() === "netlify-blobs") {
+      const store = await blobStore();
+      const meta = await store.getMetadata(assertKey(key));
+      return meta !== null;
+    }
+    if (env.storageDriver() === "s3") {
       await storageGet(key);
       return true;
     }

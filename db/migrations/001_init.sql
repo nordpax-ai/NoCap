@@ -4,8 +4,8 @@
 
 CREATE SCHEMA IF NOT EXISTS private;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
-GRANT USAGE ON SCHEMA private TO nocap_app;
-GRANT USAGE ON SCHEMA public TO nocap_app;
+-- Grants to nocap_app are applied at the end, and only when that role exists.
+-- Netlify DB / Neon gives one non-superuser login. Triggers, not the role name, enforce immutability.
 
 -- ---------------------------------------------------------------------------
 -- Members
@@ -231,7 +231,11 @@ BEGIN
       NEW.category := 'resolution';
       NEW.area := 'register';
     END IF;
-    IF NEW.area = 'register' AND current_user <> 'nocap_owner' THEN
+    -- nocap_owner is the local migration role. On Neon the login has another
+    -- name, so the security-definer functions set nocap.register_write instead.
+    IF NEW.area = 'register'
+       AND current_user IS DISTINCT FROM 'nocap_owner'
+       AND current_setting('nocap.register_write', true) IS DISTINCT FROM 'on' THEN
       RAISE EXCEPTION 'register documents are added by an admin';
     END IF;
     RETURN NEW;
@@ -265,7 +269,9 @@ DECLARE
 BEGIN
   SELECT * INTO doc FROM documents WHERE id = COALESCE(NEW.document_id, OLD.document_id);
   IF TG_OP = 'INSERT' THEN
-    IF doc.area = 'register' AND current_user <> 'nocap_owner' THEN
+    IF doc.area = 'register'
+       AND current_user IS DISTINCT FROM 'nocap_owner'
+       AND current_setting('nocap.register_write', true) IS DISTINCT FROM 'on' THEN
       RAISE EXCEPTION 'register versions are added by an admin';
     END IF;
     IF doc.immutable AND EXISTS (
@@ -522,6 +528,7 @@ BEGIN
   IF p_category NOT IN ('charter', 'code_of_conduct', 'minutes', 'resolution', 'other') THEN
     RAISE EXCEPTION 'unknown register category';
   END IF;
+  PERFORM set_config('nocap.register_write', 'on', true);
   INSERT INTO documents (area, category, title, created_by, immutable)
   VALUES ('register', p_category, trim(p_title), p_actor, p_category = 'resolution')
   RETURNING id INTO new_id;
@@ -560,6 +567,7 @@ BEGIN
   IF doc.immutable AND next_no > 1 THEN
     RAISE EXCEPTION 'resolutions cannot be modified';
   END IF;
+  PERFORM set_config('nocap.register_write', 'on', true);
   INSERT INTO document_versions (
     document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by
   ) VALUES (
@@ -821,47 +829,50 @@ $$;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC;
 
-GRANT SELECT ON profiles TO nocap_app;
-GRANT UPDATE (
-  display_name, firm, city, practice_area, contacts,
-  public_role, bio, jurisdiction, photo_key, updated_at
-) ON profiles TO nocap_app;
-
-GRANT SELECT, INSERT, DELETE ON sessions TO nocap_app;
-GRANT SELECT, INSERT ON auth_tokens TO nocap_app;
-GRANT SELECT, INSERT ON applications TO nocap_app;
-GRANT SELECT ON publications TO nocap_app;
-GRANT SELECT, INSERT ON documents TO nocap_app;
-GRANT SELECT, INSERT ON document_versions TO nocap_app;
-GRANT SELECT, INSERT ON questions TO nocap_app;
-GRANT SELECT, INSERT ON question_comments TO nocap_app;
-GRANT SELECT, INSERT ON attachments TO nocap_app;
-GRANT SELECT ON votes TO nocap_app;
-GRANT SELECT ON vote_electorate TO nocap_app;
-GRANT SELECT, INSERT ON ballots TO nocap_app;
-GRANT SELECT ON resolutions TO nocap_app;
-
-GRANT EXECUTE ON FUNCTION
-  private.invite_member(uuid, text, text, text, timestamptz),
-  private.accept_invite(text, text),
-  private.reset_password(text, text),
-  private.set_member_status(uuid, uuid, text),
-  private.create_register_document(uuid, text, text),
-  private.add_register_version(uuid, uuid, text, text, text, integer),
-  private.create_publication(uuid, text, text, text, text, text, uuid, date, text),
-  private.open_vote(uuid, text, text, timestamptz, numeric, numeric),
-  private.close_vote(uuid),
-  private.close_due_votes()
-TO nocap_app;
-
--- seed_close_vote stays owner-only.
-
--- Row level security: the server role may use the tables. Everyone else,
--- including a future Supabase anon/authenticated role, is denied.
-DO $$
+-- Row level security stays on for every table. The permissive policy and the
+-- grants exist only when nocap_app does. A single Neon login owns the tables,
+-- so it bypasses RLS, and the triggers still apply to it. nocap_app cannot.
+DO $grants$
 DECLARE
   tbl text;
+  has_app boolean;
 BEGIN
+  SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nocap_app') INTO has_app;
+
+  IF has_app THEN
+    EXECUTE 'GRANT USAGE ON SCHEMA private TO nocap_app';
+    EXECUTE 'GRANT USAGE ON SCHEMA public TO nocap_app';
+    EXECUTE 'GRANT SELECT ON profiles TO nocap_app';
+    EXECUTE 'GRANT UPDATE (display_name, firm, city, practice_area, contacts, public_role, bio, jurisdiction, photo_key, updated_at) ON profiles TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT, DELETE ON sessions TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON auth_tokens TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON applications TO nocap_app';
+    EXECUTE 'GRANT SELECT ON publications TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON documents TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON document_versions TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON questions TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON question_comments TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON attachments TO nocap_app';
+    EXECUTE 'GRANT SELECT ON votes TO nocap_app';
+    EXECUTE 'GRANT SELECT ON vote_electorate TO nocap_app';
+    EXECUTE 'GRANT SELECT, INSERT ON ballots TO nocap_app';
+    EXECUTE 'GRANT SELECT ON resolutions TO nocap_app';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION
+      private.invite_member(uuid, text, text, text, timestamptz),
+      private.accept_invite(text, text),
+      private.reset_password(text, text),
+      private.set_member_status(uuid, uuid, text),
+      private.create_register_document(uuid, text, text),
+      private.add_register_version(uuid, uuid, text, text, text, integer),
+      private.create_publication(uuid, text, text, text, text, text, uuid, date, text),
+      private.open_vote(uuid, text, text, timestamptz, numeric, numeric),
+      private.close_vote(uuid),
+      private.close_due_votes()
+    TO nocap_app';
+  ELSE
+    RAISE NOTICE 'role nocap_app is absent; skipping grants. Immutability is in the triggers.';
+  END IF;
+
   FOREACH tbl IN ARRAY ARRAY[
     'profiles', 'sessions', 'auth_tokens', 'applications', 'publications',
     'documents', 'document_versions', 'questions', 'question_comments',
@@ -869,9 +880,15 @@ BEGIN
   ]
   LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
-    EXECUTE format(
-      'CREATE POLICY nocap_app_all ON %I FOR ALL TO nocap_app USING (true) WITH CHECK (true)',
-      tbl
-    );
+    IF has_app THEN
+      EXECUTE format('DROP POLICY IF EXISTS nocap_app_all ON %I', tbl);
+      EXECUTE format(
+        'CREATE POLICY nocap_app_all ON %I FOR ALL TO nocap_app USING (true) WITH CHECK (true)',
+        tbl
+      );
+    END IF;
   END LOOP;
-END $$;
+END
+$grants$;
+
+-- seed_close_vote stays callable only by the function owner.

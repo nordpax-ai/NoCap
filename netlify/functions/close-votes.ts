@@ -1,11 +1,14 @@
 import { Pool } from "pg";
 import type { Config, Context } from "@netlify/functions";
+import { resolveDatabaseUrl } from "../../lib/database-url";
 
 export default async function closeVotes(_request: Request, _context: Context) {
-  const connectionString =
-    process.env.NETLIFY_DATABASE_URL || process.env.NETLIFY_DB_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    return new Response("No database URL", { status: 500 });
+  let connectionString: string;
+  try {
+    connectionString = resolveDatabaseUrl().url;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No database URL";
+    return new Response(message, { status: 500 });
   }
   const pool = new Pool({ connectionString, max: 1 });
   try {

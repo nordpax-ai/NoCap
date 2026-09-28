@@ -71,17 +71,53 @@ Closed votes and resolutions cannot be updated or deleted, including by the data
 
 ## Netlify demo
 
-This is the client demo that replaces the static site `nocap-preview.netlify.app`. It is not the production EU deployment below. Nothing in this repository deploys itself.
+This is the client demo that replaces the static site `nocap-preview.netlify.app`. It is separate from the production EU deployment below. Nothing in this repository deploys itself.
 
 The build uses the current Netlify Next.js runtime (`@netlify/plugin-nextjs` 5.16.0, the OpenNext adapter) and Node `22.14.0`, both set in `netlify.toml`. Each build runs `npm run db:deploy`, which migrates and, only when the database is empty, loads the demo. A second build does not wipe votes or members.
 
+### Netlify Database
+
+The discontinued Netlify DB extension (Neon, `@netlify/neon`, `NETLIFY_DATABASE_URL`) no longer accepts new databases. This repo uses [Netlify Database](https://docs.netlify.com/build/data-and-storage/netlify-database/).
+
+Netlify provisions the database on deploy because `@netlify/database` is in `dependencies`. There is no separate "enable Netlify DB" step and no extra `netlify.toml` key. If that package is absent, Netlify does not create a database.
+
+The app reads the connection string in this order, and keeps a value only when it starts with `postgres://` or `postgresql://`:
+
+1. `getConnectionString()` from `@netlify/database`. On Netlify this is the URL for the current deploy: the production database, or a deploy-preview branch. It reads `NETLIFY_DB_URL`.
+2. `NETLIFY_DB_URL`, the variable Netlify injects into builds, functions, and the running site.
+3. `NETLIFY_DATABASE_URL`, when it is a Postgres URL. That covers a pasted Neon URL or a site that already has the old extension.
+4. `DATABASE_URL`, when it is a Postgres URL. Use this for another Postgres, including Neon or Supabase in the EU.
+
+`db:deploy` uses the same order, and also accepts `DATABASE_URL_OWNER` after the Netlify URLs. Locally that owner URL is the migration role. On Netlify, leave `DATABASE_URL_OWNER` unset so migrations run as the Netlify role.
+
+The existing site variable `DATABASE_URL=file:./preview.db` can stay. It does not start with `postgres://` or `postgresql://`, so `db:deploy` and the runtime skip it. A Postgres `DATABASE_URL` is used only when no Netlify Database URL is present. To point this Netlify site at Supabase instead, remove `@netlify/database` and set `DATABASE_URL` to a `postgres://` URL.
+
+Schema changes stay in `db/migrations` and are applied by `npm run db:deploy` during the build. This project does not use Netlify's `netlify/database/migrations` layout.
+
+The Netlify role owns the tables. It is not a superuser. Closed votes, ballots and resolutions stay immutable because the triggers reject the change for every role, including the table owner.
+
+### Region, including the EU
+
+The database region is chosen when the database is created. Netlify's API defaults it to the site's **functions region** (`POST /sites/{site_id}/database`, optional `region`). New sites use `cmh` (Ohio, US East). This repository does not set a region, so the demo database is created in whatever functions region the site already has.
+
+The EU can be selected, and it has to be selected before the first deploy that provisions the database:
+
+1. In the Netlify UI open **Project configuration → Build & deploy → Continuous deployment → Functions region**.
+2. Set it to `fra` (Frankfurt), `dub` (Ireland), or `lhr` (London). `cdg` (Paris) and `mxp` (Milan) exist only through Netlify support.
+3. Deploy this repository. Netlify creates the database in that functions region.
+
+Changing the functions region later, or setting a per-function `region` in `netlify.toml`, moves functions. It does not move a database that already exists. The current docs have no `netlify.toml` key that sets the database region by itself. Choosing a functions region other than the default is a Pro or Enterprise feature.
+
+A production database in the EU can also be any Postgres you run there. Set `DATABASE_URL` to its `postgres://` URL and do not provision Netlify Database. That layout is described under "Deploy in the EU".
+
 ### Environment variables
 
-Set these in the Netlify UI (**Site configuration → Environment variables**) so they exist at runtime as well as during the build. `netlify.toml` already sets `DEMO_MODE`, `EMAIL_PROVIDER` and `STORAGE_DRIVER` for the build. Repeat them in the UI so the running functions see them.
+Set these in the Netlify UI (**Site configuration → Environment variables**) so they exist at runtime as well as during the build. `netlify.toml` already sets `DEMO_MODE`, `EMAIL_PROVIDER` and `STORAGE_DRIVER` for the build. Repeat them in the UI so the running functions see them. Leave `NETLIFY_DB_URL` unset: Netlify injects it.
 
 | Variable | Value |
 | --- | --- |
-| `NETLIFY_DATABASE_URL` | Injected when Netlify DB is enabled. If the product sets `NETLIFY_DB_URL` instead, that is read too. `DATABASE_URL` is the fallback. Do not set `DATABASE_URL_OWNER` on Netlify. |
+| `NETLIFY_DB_URL` | Injected by Netlify Database. Do not set it by hand. |
+| `DATABASE_URL` | Optional Postgres fallback (`postgres://` or `postgresql://`). The site's `file:./preview.db` value is ignored. Do not set `DATABASE_URL_OWNER` on Netlify. |
 | `STORAGE_DRIVER` | `netlify-blobs` |
 | `EMAIL_PROVIDER` | `log` |
 | `DEMO_MODE` | `1` |
@@ -93,15 +129,14 @@ Set these in the Netlify UI (**Site configuration → Environment variables**) s
 
 Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`.
 
-Do not set `DATABASE_URL` to the local `nocap_app` string. The Neon role owns the tables. It is not a superuser. Closed votes, ballots and resolutions stay immutable because the triggers reject the change for every role, including the table owner.
+### What a deploy does
 
-### Deploy steps
-
-1. Create a Netlify site from this repository. The build command and publish directory come from `netlify.toml` (`npm run db:deploy && npm run build`, publish `.next`).
-2. Enable **Netlify DB** (Neon Postgres) on the site and let it inject `NETLIFY_DATABASE_URL` or `NETLIFY_DB_URL`.
-3. Set the environment variables in the table above. `STORAGE_DRIVER=netlify-blobs` selects the Blobs adapter. The store name is `nocap-files`.
-4. Deploy. The first build migrates and seeds. Later builds migrate and skip the seed.
-5. Open the site, sign in, and use **Outbox** for invite links. They point at the deployed URL.
+1. The site is connected to this repository. The build command and publish directory come from `netlify.toml` (`npm run db:deploy && npm run build`, publish `.next`).
+2. If the database must be in the EU, set the functions region to `fra`, `dub`, or `lhr` before this deploy. See above.
+3. Set the environment variables in the table. `STORAGE_DRIVER=netlify-blobs` selects the Blobs adapter. The store name is `nocap-files`. The old `DATABASE_URL=file:./preview.db` can remain.
+4. Deploy. Netlify sees `@netlify/database` and provisions the database, then injects `NETLIFY_DB_URL` into the build. `db:deploy` migrates `db/migrations` and seeds the demo when the demo admin is absent. `npm run build` follows.
+5. Later deploys migrate and skip the seed. A deploy preview gets its own database branch, copied from production when that preview is first created, and `db:deploy` migrates that branch.
+6. Open the site, sign in, and use **Outbox** for invite links. They point at the deployed URL.
 
 Demo sign-in after seeding:
 
@@ -120,11 +155,13 @@ Logged mail is not sent. The admin reads it at `/area/admin/outbox`.
 npm run db:deploy
 ```
 
-That uses `DATABASE_URL_OWNER` when it is set, otherwise `NETLIFY_DATABASE_URL`. It is safe to run twice.
+Locally there is no Netlify Database URL, so this uses `DATABASE_URL_OWNER` when that value is a Postgres URL, then `DATABASE_URL`. It is safe to run twice.
 
 ## Deploy in the EU
 
-Do not point this app at a US-only region. A working layout:
+The production layout below is a Postgres and an app host you choose, both in the EU. The Netlify demo can also place its database in the EU by setting the site functions region to `fra`, `dub`, or `lhr` before the first deploy that provisions Netlify Database. That setting is described in the Netlify demo section. A later change of functions region does not move a database that already exists.
+
+A working production layout:
 
 1. **Database.** PostgreSQL 16 in an EU region. Supabase's EU (Frankfurt) project is a direct fit: run the SQL in `db/migrations` as the owner, and set `DATABASE_URL` to a role equivalent to `nocap_app`. Do not put the owner URL in the running app. Do not enable the Data API for these tables; the policies admit only the application role.
 2. **App.** Any Node host in the EU (a small VM, Fly.io `fra`, or a container platform with an EU region). `npm run build && npm run start`. Set `APP_URL` to `https://nocap-law.com` once that domain is connected. It is not connected yet.

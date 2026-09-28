@@ -1,24 +1,12 @@
-function required(name: string, fallback?: string): string {
-  const value = process.env[name] ?? fallback;
-  if (!value) throw new Error(`Missing environment variable ${name}`);
-  return value;
-}
-
-function databaseUrlFromEnv(): string {
-  return (
-    process.env.NETLIFY_DATABASE_URL ||
-    process.env.NETLIFY_DB_URL ||
-    required("DATABASE_URL")
-  );
-}
+import { resolveDatabaseUrl, resolveOwnerDatabaseUrl } from "./database-url";
 
 export type StorageDriver = "local" | "s3" | "netlify-blobs";
 
 export const env = {
-  // Netlify DB (Neon) injects NETLIFY_DATABASE_URL, or NETLIFY_DB_URL on the current product.
-  // DATABASE_URL is the local fallback.
-  databaseUrl: () => databaseUrlFromEnv(),
-  ownerDatabaseUrl: () => process.env.DATABASE_URL_OWNER || databaseUrlFromEnv(),
+  // Netlify Database injects the URL behind getConnectionString() / NETLIFY_DB_URL.
+  // NETLIFY_DATABASE_URL and DATABASE_URL are Postgres fallbacks. Non-Postgres values are ignored.
+  databaseUrl: () => resolveDatabaseUrl().url,
+  ownerDatabaseUrl: () => resolveOwnerDatabaseUrl().url,
   appUrl: () =>
     (process.env.APP_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || "http://localhost:3000").replace(
       /\/$/,

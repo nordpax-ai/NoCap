@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["pg", "bcryptjs", "nodemailer", "@netlify/blobs"],
+  serverExternalPackages: ["pg", "bcryptjs", "nodemailer", "@netlify/blobs", "@netlify/database"],
   experimental: {
     serverActions: {
       bodySizeLimit: "16mb",

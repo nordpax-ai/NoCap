@@ -3,10 +3,10 @@ import { mkdir, writeFile, rm } from "fs/promises";
 import path from "path";
 import bcrypt from "bcryptjs";
 import { Pool, type PoolClient } from "pg";
-import { PDFDocument, StandardFonts } from "pdf-lib";
 import { pgPoolConfig } from "../lib/database-url";
 import { env } from "../lib/env";
-import { storagePut } from "../lib/storage";
+import { publicationPdf, publicationPdfKey, seedDocuments } from "../lib/seed-files";
+import { storagePutSeed } from "../lib/storage";
 import { loadEnv } from "./load-env";
 
 loadEnv();
@@ -210,78 +210,40 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
 
   const adminId = ids.get("Paolo Piccirilli")!;
 
-  async function putText(key: string, text: string) {
-    await storagePut(key, Buffer.from(text), "text/plain");
-  }
-
-  async function addRegister(category: string, title: string, versions: { name: string; text: string; at: string }[]) {
+  for (const document of seedDocuments) {
+    const authorId = ids.get(document.author)!;
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO documents (area, category, title, created_by, immutable, created_at)
-       VALUES ('register', $1, $2, $3, $4, $5) RETURNING id`,
-      [category, title, adminId, category === "resolution", versions[0].at],
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [
+        document.area,
+        document.category,
+        document.title,
+        authorId,
+        document.category === "resolution",
+        document.createdAt,
+      ],
     );
     const documentId = rows[0].id;
     let n = 1;
-    for (const version of versions) {
-      const key = `documents/${documentId}/v${n}-${version.name}`;
-      await putText(key, version.text);
+    for (const version of document.versions) {
+      const body = Buffer.from(version.text);
+      await storagePutSeed(version.key, body, "text/plain");
       await client.query(
         `INSERT INTO document_versions
            (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
          VALUES ($1,$2,$3,$4,'text/plain',$5,$6,$7)`,
-        [documentId, n, key, version.name, Buffer.byteLength(version.text), adminId, version.at],
+        [documentId, n, version.key, version.filename, body.length, authorId, version.at],
       );
       n += 1;
     }
   }
 
-  const exampleNote = "EXAMPLE PLACEHOLDER. Not an adopted text.\n";
-  await addRegister("charter", "Charter", [
-    { name: "charter-v1.txt", text: exampleNote + "Example charter, version 1.\n", at: "2025-11-20T10:00:00Z" },
-    { name: "charter-v2.txt", text: exampleNote + "Example charter, version 2.\n", at: "2026-06-02T10:00:00Z" },
-    { name: "charter-v3.txt", text: exampleNote + "Example charter, version 3.\n", at: "2026-08-18T10:00:00Z" },
-  ]);
-  await addRegister("code_of_conduct", "Code of conduct", [
-    { name: "code-of-conduct-v2.txt", text: exampleNote + "Example code of conduct.\n", at: "2026-08-18T10:00:00Z" },
-  ]);
-  for (const [title, at] of [
-    ["Minutes — founding meeting", "2025-11-20T10:00:00Z"],
-    ["Minutes — January call", "2026-01-15T10:00:00Z"],
-    ["Minutes — March call", "2026-03-12T10:00:00Z"],
-    ["Minutes — June call", "2026-06-02T10:00:00Z"],
-  ] as const) {
-    await addRegister("minutes", title, [{ name: "minutes.txt", text: exampleNote + title + "\n", at }]);
-  }
-  await addRegister("resolution", "Resolution — example, uploaded file", [
-    { name: "resolution.txt", text: exampleNote + "An uploaded resolution. It cannot be edited or deleted.\n", at: "2026-08-18T12:00:00Z" },
-  ]);
-
-  const sharedId = (await client.query<{ id: string }>(
-    `INSERT INTO documents (area, category, title, created_by, created_at)
-     VALUES ('shared', 'shared', 'Example note on leakage drafting', $1, '2026-03-12T09:00:00Z')
-     RETURNING id`,
-    [ids.get("Elena Rossi")],
-  )).rows[0].id;
-  const sharedKey = `documents/${sharedId}/v1-note.txt`;
-  const sharedText = "EXAMPLE. A shared note, not a publication and not a resolution.\n";
-  await putText(sharedKey, sharedText);
-  await client.query(
-    `INSERT INTO document_versions
-       (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by, uploaded_at)
-     VALUES ($1, 1, $2, 'note.txt', 'text/plain', $3, $4, '2026-03-12T09:00:00Z')`,
-    [sharedId, sharedKey, Buffer.byteLength(sharedText), ids.get("Elena Rossi")],
-  );
-
   for (const [slug, category, title, summary, author, published, withPdf] of publications) {
     let pdfKey: string | null = null;
     if (withPdf) {
-      const doc = await PDFDocument.create();
-      const page = doc.addPage([595, 842]);
-      const font = await doc.embedFont(StandardFonts.TimesRoman);
-      page.drawText("EXAMPLE PUBLICATION — not a real article.", { x: 54, y: 760, size: 14, font });
-      page.drawText(title, { x: 54, y: 730, size: 12, font });
-      pdfKey = `publications/${slug}.pdf`;
-      await storagePut(pdfKey, Buffer.from(await doc.save()), "application/pdf");
+      pdfKey = publicationPdfKey(slug);
+      await storagePutSeed(pdfKey, await publicationPdf(title), "application/pdf");
     }
     const body =
       "Example text from the design mockup. This is not a real publication.\n\n" +

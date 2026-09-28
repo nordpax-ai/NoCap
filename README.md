@@ -119,7 +119,7 @@ Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DE
 
 1. The site is connected to this repository. The build command and publish directory come from `netlify.toml` (`npm run db:deploy && npm run build`, publish `.next`).
 2. Replace `DATABASE_URL` with the Supabase session pooler URI, scoped to Builds and Functions. Set the other variables in the table. `STORAGE_DRIVER=netlify-blobs` selects the Blobs adapter. The store name is `nocap-files`.
-3. Deploy. Netlify does not create a database. `db:deploy` connects to Supabase, applies `db/migrations`, and seeds the demo when the demo admin is absent. `npm run build` follows.
+3. Deploy. Netlify does not create a database. `db:deploy` connects to Supabase, applies `db/migrations`, and seeds the demo when the demo admin is absent. The build cannot write Netlify Blobs, so seed files are stored as keys and created in Blobs on the first download. `npm run build` follows.
 4. Later deploys migrate and skip the seed. Deploy previews use the same `DATABASE_URL` unless you give them a different one.
 5. Open the site, sign in, and use **Outbox** for invite links. They point at the deployed URL.
 

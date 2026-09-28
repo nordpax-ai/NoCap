@@ -17,7 +17,38 @@ function assertKey(key: string): string {
 
 async function blobStore() {
   const { getStore } = await import("@netlify/blobs");
-  return getStore({ name: "nocap-files", consistency: "strong" });
+  const siteID = process.env.SITE_ID || process.env.NETLIFY_SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_AUTH_TOKEN;
+  return getStore({
+    name: "nocap-files",
+    consistency: "strong",
+    ...(siteID && token ? { siteID, token } : {}),
+  });
+}
+
+export function blobsNotWritable(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if (error.name === "MissingBlobsEnvironmentError") return true;
+  return (
+    /not been configured to use Netlify Blobs/i.test(error.message) ||
+    /only write to deploy-specific stores/i.test(error.message)
+  );
+}
+
+let seedBlobsWarning = false;
+
+export async function storagePutSeed(key: string, body: Buffer, contentType: string): Promise<void> {
+  try {
+    await storagePut(key, body, contentType);
+  } catch (error) {
+    if (!blobsNotWritable(error)) throw error;
+    if (!seedBlobsWarning) {
+      seedBlobsWarning = true;
+      console.log(
+        "Netlify Blobs is not writable during this build. Seed files stay in the database keys and are created on first request.",
+      );
+    }
+  }
 }
 
 export async function storagePut(key: string, body: Buffer, contentType: string): Promise<void> {
@@ -52,7 +83,7 @@ export async function storagePut(key: string, body: Buffer, contentType: string)
   await writeFile(full, body);
 }
 
-export async function storageGet(key: string): Promise<Buffer> {
+async function storageGetStored(key: string): Promise<Buffer> {
   const safe = assertKey(key);
   if (env.storageDriver() === "netlify-blobs") {
     const store = await blobStore();
@@ -75,6 +106,18 @@ export async function storageGet(key: string): Promise<Buffer> {
     return Buffer.from(bytes);
   }
   return readFile(path.join(env.storageDir(), safe));
+}
+
+export async function storageGet(key: string): Promise<Buffer> {
+  try {
+    return await storageGetStored(key);
+  } catch (error) {
+    const { seedFile } = await import("./seed-files");
+    const generated = await seedFile(key);
+    if (!generated) throw error;
+    await storagePut(key, generated.body, generated.contentType).catch(() => undefined);
+    return generated.body;
+  }
 }
 
 export async function storageExists(key: string): Promise<boolean> {

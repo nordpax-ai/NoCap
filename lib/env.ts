@@ -3,8 +3,8 @@ import { resolveDatabaseUrl, resolveOwnerDatabaseUrl } from "./database-url";
 export type StorageDriver = "local" | "s3" | "netlify-blobs";
 
 export const env = {
-  // Netlify Database injects the URL behind getConnectionString() / NETLIFY_DB_URL.
-  // NETLIFY_DATABASE_URL and DATABASE_URL are Postgres fallbacks. Non-Postgres values are ignored.
+  // DATABASE_URL is the Supabase session pooler URI on Netlify, or local Postgres.
+  // Non-Postgres values are ignored. DATABASE_URL_OWNER is only for db:deploy.
   databaseUrl: () => resolveDatabaseUrl().url,
   ownerDatabaseUrl: () => resolveOwnerDatabaseUrl().url,
   appUrl: () =>

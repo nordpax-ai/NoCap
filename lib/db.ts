@@ -1,4 +1,5 @@
 import { Pool, types, type PoolClient } from "pg";
+import { pgPoolConfig, runtimePoolMax } from "./database-url";
 import { env } from "./env";
 
 types.setTypeParser(20, (value) => Number(value));
@@ -8,10 +9,7 @@ const globalForPg = globalThis as unknown as { pool?: Pool };
 
 export const pool =
   globalForPg.pool ??
-  new Pool({
-    connectionString: env.databaseUrl(),
-    max: process.env.NETLIFY === "true" ? 1 : 10,
-  });
+  new Pool(pgPoolConfig(env.databaseUrl(), runtimePoolMax()));
 
 if (process.env.NODE_ENV !== "production") globalForPg.pool = pool;
 

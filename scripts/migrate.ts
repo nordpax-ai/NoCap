@@ -1,13 +1,14 @@
 import { readdirSync, readFileSync } from "fs";
 import path from "path";
 import { Pool } from "pg";
+import { pgPoolConfig } from "../lib/database-url";
 import { env } from "../lib/env";
 import { loadEnv } from "./load-env";
 
 loadEnv();
 
 export async function migrate(): Promise<void> {
-  const pool = new Pool({ connectionString: env.ownerDatabaseUrl(), max: 1 });
+  const pool = new Pool(pgPoolConfig(env.ownerDatabaseUrl(), 1));
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id text PRIMARY KEY,

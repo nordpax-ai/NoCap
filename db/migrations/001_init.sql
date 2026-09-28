@@ -5,7 +5,8 @@
 CREATE SCHEMA IF NOT EXISTS private;
 REVOKE ALL ON SCHEMA private FROM PUBLIC;
 -- Grants to nocap_app are applied at the end, and only when that role exists.
--- Netlify DB / Neon gives one non-superuser login. Triggers, not the role name, enforce immutability.
+-- Supabase's postgres login owns the tables and bypasses RLS. Triggers still
+-- enforce immutability. No extensions: gen_random_uuid() is built into Postgres 13+.
 
 -- ---------------------------------------------------------------------------
 -- Members

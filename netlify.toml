@@ -2,9 +2,8 @@
 # The Next.js runtime (OpenNext, @netlify/plugin-nextjs v5) is pinned here
 # so this site does not drift onto the legacy runtime.
 #
-# Netlify Database is provisioned because @netlify/database is a dependency.
-# There is no toml key for the database region. It follows the site's
-# Functions region at creation time. See the README.
+# Postgres is Supabase in Frankfurt, via DATABASE_URL. This repo does not
+# depend on @netlify/database, so Netlify does not provision a database.
 
 [build]
   command = "npm run db:deploy && npm run build"

@@ -4,6 +4,7 @@ import path from "path";
 import bcrypt from "bcryptjs";
 import { Pool, type PoolClient } from "pg";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { pgPoolConfig } from "../lib/database-url";
 import { env } from "../lib/env";
 import { storagePut } from "../lib/storage";
 import { loadEnv } from "./load-env";
@@ -135,7 +136,7 @@ const publications = [
 ] as const;
 
 export async function seedDatabase(options: { reset: boolean }): Promise<void> {
-  const pool = new Pool({ connectionString: env.ownerDatabaseUrl(), max: 1 });
+  const pool = new Pool(pgPoolConfig(env.ownerDatabaseUrl(), 1));
   const client = await pool.connect();
   try {
     await client.query(`SELECT pg_advisory_lock(48291001)`);

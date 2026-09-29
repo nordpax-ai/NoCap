@@ -21,3 +21,14 @@ export function parseClubDateTime(value: string): Date {
 export function deadlineInputValue(date: Date): string {
   return DateTime.fromJSDate(date).setZone(env.timezone()).toFormat("yyyy-LL-dd'T'HH:mm");
 }
+
+export function minimumVoteDeadlineInput(): string {
+  return DateTime.now().setZone(env.timezone()).plus({ hours: 48, minutes: 1 }).toFormat("yyyy-LL-dd'T'HH:mm");
+}
+
+export function questionStatus(deadline: Date | string | null): { open: boolean; text: string } {
+  const at = deadline == null ? null : deadline instanceof Date ? deadline : new Date(deadline);
+  const open = !at || at.getTime() > Date.now();
+  const when = at ? ` · ${formatShort(at)}` : "";
+  return { open, text: `${open ? "Open" : "Closed"}${when}` };
+}

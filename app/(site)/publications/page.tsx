@@ -24,13 +24,9 @@ export default async function PublicationsPage() {
   return (
     <div className="wrap inner">
       <div className="eyebrow">Publications</div>
-      <h1 className="pt">
-        Written by members,
-        <br />
-        for people who do the work.
-      </h1>
+      <h1 className="pt">Written by members, for people who do the work.</h1>
       <p className="lede">
-        Short pieces on deal features and structuring quirks, legislative developments and market trends — signed by the member who wrote them.
+        Articles, interviews and cross-border reads on deal features, structuring quirks, legislative developments and market trends - each one under the name of the member behind it.
       </p>
       {rows.some((row) => row.is_example) ? (
         <p className="note" style={{ marginTop: 28 }}>

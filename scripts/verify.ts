@@ -3,11 +3,10 @@
  * Run with the dev server on http://localhost:3000 and a fresh seed.
  */
 import { inflateRawSync, inflateSync } from "zlib";
-import { mkdir, readdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile } from "fs/promises";
 import path from "path";
 import { DateTime } from "luxon";
 import JSZip from "jszip";
-import { PDFDocument, StandardFonts } from "pdf-lib";
 import { Pool } from "pg";
 import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { loadEnv } from "./load-env";
@@ -128,6 +127,15 @@ async function main(): Promise<void> {
 
   try {
     const ids = await snapshotIds(app);
+    const paolo = await app.query<{ id: string }>(
+      `SELECT id FROM profiles WHERE email = 'paolo.piccirilli@example.invalid'`,
+    );
+    await app.query(
+      `INSERT INTO notifications (recipient_id, kind, title, body, href, event_key)
+       VALUES ($1, 'question_opened', 'Question: Annual meeting — venue options', 'Example notice for the bell.', $2, $3)
+       ON CONFLICT (recipient_id, event_key) DO UPDATE SET read_at = NULL`,
+      [paolo.rows[0].id, `/area/questions/${ids.question}`, `shot:bell:${paolo.rows[0].id}`],
+    );
     if (!process.env.SKIP_SHOTS) await screenshots(browser, ids);
 
     const clara = await app.query(`SELECT status FROM profiles WHERE email = 'clara.example@example.invalid'`);
@@ -185,35 +193,12 @@ async function main(): Promise<void> {
     check("public members page omits the firm", !afterProfile.includes("Example Firm"));
     await members.close();
 
-    const pdfPath = path.join(process.cwd(), "var", "verify-cv.pdf");
-    const pdf = await PDFDocument.create();
-    const font = await pdf.embedFont(StandardFonts.TimesRoman);
-    const page = pdf.addPage();
-    page.drawText("Example CV. Not a real person.", { x: 50, y: 750, size: 12, font });
-    await writeFile(pdfPath, Buffer.from(await pdf.save()));
-
-    const apply = await freshPage(browser);
-    await goto(apply, `${BASE}/membership`);
-    await apply.locator("#name").fill("Applicant Example");
-    await apply.locator("#firm_and_city").fill("Example Firm, Lyon");
-    await apply.locator("#email").fill("applicant.example@example.invalid");
-    await apply.locator("#practice_description").fill("Example practice description for verification.");
-    const cv = await apply.$("input#cv");
-    if (!cv) throw new Error("CV field missing");
-    await (cv as import("puppeteer-core").ElementHandle<HTMLInputElement>).uploadFile(pdfPath);
-    await apply.locator('input[name="privacy"]').click();
-    await clickButton(apply, "Send application");
-    await apply.waitForFunction(() => location.search.includes("sent=1"), { timeout: 30000 });
-    const applicationMail = (await emailsSince(started)).find((mail) => mail.subject.startsWith("Membership application"));
-    check(
-      "application is emailed to the Founding Committee",
-      Boolean(applicationMail?.to.includes("founding-committee@nocap-law.com")),
-      applicationMail?.to.join(",") || "no application email",
-    );
-    await goto(admin, `${BASE}/area/applications`);
-    const appsHtml = await admin.content();
-    check("application is stored for members to view", appsHtml.includes("Applicant Example"));
-    await apply.close();
+    const membership = await freshPage(browser);
+    const membershipResponse = await membership.goto(`${BASE}/membership`, { waitUntil: "networkidle0", timeout: 60000 });
+    check("membership page is removed", membershipResponse?.status() === 404);
+    const membershipHtml = await membership.content();
+    check("membership is not in the public menu", !membershipHtml.includes(">Membership<"));
+    await membership.close();
 
     const beforeQuestion = Date.now();
     const elena = await freshPage(browser);
@@ -225,13 +210,14 @@ async function main(): Promise<void> {
     await clickButton(elena, "Post the question");
     await elena.waitForFunction(() => /\/area\/questions\/[0-9a-f-]{36}/.test(location.pathname), { timeout: 30000 });
     const questionUrl = elena.url().split("?")[0];
-    const questionMail = (await emailsSince(beforeQuestion)).find((mail) => mail.subject.startsWith("Question:"));
+    const questionMails = (await emailsSince(beforeQuestion)).filter((mail) => mail.subject.startsWith("Question:"));
     const expected = new Set(active.rows.map((row) => row.email));
-    const mailed = new Set(questionMail?.to || []);
+    expected.delete("elena.rossi@example.invalid");
+    const mailed = new Set(questionMails.flatMap((mail) => mail.to));
     check(
-      "a new question emails every active member",
-      questionMail !== undefined && [...expected].every((email) => mailed.has(email)) && mailed.size === expected.size,
-      `expected ${expected.size}, got ${(questionMail?.to || []).join(", ")}`,
+      "a new question emails every other active member",
+      questionMails.length > 0 && [...expected].every((email) => mailed.has(email)) && !mailed.has("elena.rossi@example.invalid"),
+      `expected ${[...expected].join(", ")}, got ${[...mailed].join(", ")}`,
     );
 
     await goto(admin, questionUrl);
@@ -239,27 +225,43 @@ async function main(): Promise<void> {
     await clickButton(admin, "Reply");
     await admin.waitForFunction(() => document.body.innerText.includes("Example reply from the chair"), { timeout: 20000 });
     const replyMail = (await emailsSince(beforeQuestion)).find((mail) => mail.subject.startsWith("Reply:"));
-    check("a reply emails the thread participants", Boolean(replyMail?.to.includes("elena.rossi@example.invalid")));
+    check("a reply emails the member who opened the question", Boolean(replyMail?.to.includes("elena.rossi@example.invalid")));
     check("a reply does not email the person who wrote it", !replyMail?.to.includes("paolo.piccirilli@example.invalid"));
 
     const beforeVote = Date.now();
     await goto(admin, `${BASE}/area/votes/new`);
     await admin.locator("#subject").fill("Verify frozen electorate");
     await admin.locator("#description").fill("Example vote opened during verification. The electorate freezes now.");
+    await admin.$eval("#deadline", (element) => (element as HTMLInputElement).removeAttribute("min"));
     await admin.locator("#deadline").fill(romeInput(3600));
+    await admin.locator("#quorum_constitutive").fill("50");
+    await admin.locator("#quorum_deliberative").fill("50");
+    await clickButton(admin, "Open the vote");
+    await admin.waitForFunction(() => location.search.includes("error"), { timeout: 20000 });
+    check("a vote shorter than 48 hours is refused", (await admin.content()).includes("longer than 48 hours"));
+    await admin.locator("#subject").fill("Verify frozen electorate");
+    await admin.locator("#description").fill("Example vote opened during verification. The electorate freezes now.");
+    await admin.$eval("#deadline", (element) => (element as HTMLInputElement).removeAttribute("min"));
+    await admin.locator("#deadline").fill(romeInput(49 * 3600 + 120));
     await admin.locator("#quorum_constitutive").fill("50");
     await admin.locator("#quorum_deliberative").fill("50");
     await clickButton(admin, "Open the vote");
     await admin.waitForFunction(() => /\/area\/votes\/[0-9a-f-]{36}/.test(location.pathname), { timeout: 30000 });
     const frozenVoteId = new URL(admin.url()).pathname.split("/").pop()!;
-    const openMail = (await emailsSince(beforeVote)).find((mail) => mail.subject.startsWith("Vote open:"));
-    check("opening a vote emails the frozen electorate", Boolean(openMail && openMail.to.length > 0));
+    const openMails = (await emailsSince(beforeVote)).filter((mail) => mail.subject.startsWith("Vote open:"));
+    const openTo = new Set(openMails.flatMap((mail) => mail.to));
 
     const electorate = await app.query<{ email: string }>(
       `SELECT p.email FROM vote_electorate e JOIN profiles p ON p.id = e.profile_id WHERE e.vote_id = $1`,
       [frozenVoteId],
     );
     const frozenEmails = electorate.rows.map((row) => row.email);
+    check(
+      "opening a vote emails the other eligible members",
+      frozenEmails.filter((email) => email !== "paolo.piccirilli@example.invalid").every((email) => openTo.has(email)),
+      [...openTo].join(", "),
+    );
+    check("opening a vote does not email the admin who opened it", !openTo.has("paolo.piccirilli@example.invalid"));
     check("new active member is on the frozen list", frozenEmails.includes("verify.member@example.invalid"));
     check("deactivated Clara is not on a vote opened after she left", !frozenEmails.includes("clara.example@example.invalid"));
 
@@ -304,24 +306,22 @@ async function main(): Promise<void> {
     const named = await elena.content();
     check("the vote is open: the choice is visible", named.includes("Paolo Piccirilli") && named.includes("For"));
 
-    const shortSeconds = 240;
-    const deadline = romeInput(shortSeconds);
-    const closeAfter = Date.now() + shortSeconds * 1000 + 5000;
+    const longDeadline = romeInput(49 * 3600 + 300);
     const invalidId = await openShortVote(admin, {
       subject: "Verify constitutive quorum fails",
-      deadline,
+      deadline: longDeadline,
       qc: "90",
       qd: "50",
     });
     const notCarriedId = await openShortVote(admin, {
       subject: "Verify deliberative quorum counts abstentions",
-      deadline,
+      deadline: longDeadline,
       qc: "1",
       qd: "60",
     });
     const carriedId = await openShortVote(admin, {
       subject: "Verify both quorums met",
-      deadline,
+      deadline: longDeadline,
       qc: "1",
       qd: "50",
     });
@@ -330,8 +330,9 @@ async function main(): Promise<void> {
     await cast(elena, notCarriedId, "Abstain");
     await cast(admin, carriedId, "For");
     await cast(joiner, carriedId, "For");
-    const waitMs = closeAfter - Date.now();
-    if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
+    await expireVote(owner, invalidId);
+    await expireVote(owner, notCarriedId);
+    await expireVote(owner, carriedId);
     const cron = await fetch(`${BASE}/api/jobs/close-votes`, {
       method: "POST",
       headers: { authorization: `Bearer ${process.env.CRON_SECRET}` },
@@ -361,7 +362,12 @@ async function main(): Promise<void> {
     );
     const seededPdf = await fetch(`${BASE}/api/votes/${seededInvalid.rows[0].id}/record`, { headers: { cookie } });
     const seededText = pdfText(Buffer.from(await seededPdf.arrayBuffer()));
-    check("seeded invalid vote record states the outcome", seededText.includes("Invalid") && seededText.includes("Example: quorum not met"));
+    check(
+      "seeded invalid vote record states why it did not pass",
+      seededText.includes("Invalid") &&
+        seededText.includes("Constitutive quorum not reached") &&
+        seededText.includes("Example: quorum not met"),
+    );
 
     await immutability(app, owner, invalidId);
 
@@ -413,7 +419,6 @@ async function screenshots(browser: Browser, ids: { question: string; openVote: 
     ["/about", "about"],
     ["/members", "members"],
     ["/publications", "publications"],
-    ["/membership", "membership"],
     ["/login", "login"],
   ];
   for (const [route, name] of publicRoutes) {
@@ -428,14 +433,37 @@ async function screenshots(browser: Browser, ids: { question: string; openVote: 
     [`/area/questions/${ids.question}`, "question"],
     [`/area/votes/${ids.openVote}`, "vote-open"],
     [`/area/votes/${ids.invalidVote}`, "vote-invalid"],
+    ["/area/how-it-works", "how-it-works"],
   ];
   for (const [route, name] of areaRoutes) {
     await goto(page, `${BASE}${route}`);
     await shot(page, `${name}-desktop`, 1440);
     await shot(page, `${name}-mobile`, 390);
   }
+  await goto(page, `${BASE}/area`);
+  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await page.click("button.bell-btn");
+  await page.waitForSelector(".bell-panel");
+  await page.screenshot({ path: path.join(SHOTS, "notifications-desktop.png"), fullPage: true });
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+  await page.screenshot({ path: path.join(SHOTS, "notifications-mobile.png"), fullPage: true });
   await page.close();
   console.log(`Screenshots written to ${SHOTS}`);
+}
+
+async function expireVote(owner: Pool, id: string): Promise<void> {
+  const client = await owner.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SELECT set_config('nocap.closing_vote', 'on', true)`);
+    await client.query(
+      `UPDATE votes SET deadline = now() - interval '1 minute' WHERE id = $1 AND status = 'open'`,
+      [id],
+    );
+    await client.query("COMMIT");
+  } finally {
+    client.release();
+  }
 }
 
 async function openShortVote(

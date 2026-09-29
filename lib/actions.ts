@@ -17,6 +17,7 @@ import {
   tokenHash,
 } from "./auth";
 import { appLink, sendEmail } from "./email";
+import { notifyMany } from "./notify";
 import { env } from "./env";
 import { readUpload, safeFilename, storagePut } from "./storage";
 import { parseClubDateTime } from "./time";
@@ -342,18 +343,23 @@ export async function askQuestion(formData: FormData) {
       [id, user.id, title, body, deadline],
     );
     await saveAttachments(formData, "question", id, user.id);
-    const { rows } = await pool.query<{ email: string }>(
-      `SELECT email FROM profiles WHERE status = 'active'`,
+    const { rows } = await pool.query<{ id: string; email: string }>(
+      `SELECT id, email FROM profiles WHERE status = 'active' AND id <> $1`,
+      [user.id],
     );
-    await sendEmail({
-      to: rows.map((row) => row.email),
-      subject: `Question: ${title}`,
-      text:
-        `${user.display_name} opened a question.\n\n` +
-        `${title}\n\n${body}\n\n` +
-        (deadline ? `Deadline: ${deadline.toISOString()}\n\n` : "") +
-        `${appLink(`/area/questions/${id}`)}\n`,
-    });
+    await notifyMany(
+      rows.map((person) => ({
+        recipientId: person.id,
+        email: person.email,
+        kind: "question_opened",
+        title: `Question: ${title}`,
+        body:
+          `${user.display_name} opened a question.\n\n${title}\n\n${body}` +
+          (deadline ? `\n\nDeadline: ${deadline.toISOString()}` : ""),
+        href: `/area/questions/${id}`,
+        eventKey: `question:${id}:opened:${person.id}`,
+      })),
+    );
   } catch (error) {
     go("/area/questions/new", errorMessage(error));
   }
@@ -380,20 +386,26 @@ export async function replyToQuestion(formData: FormData) {
       [commentId, questionId, user.id, body],
     );
     await saveAttachments(formData, "comment", commentId, user.id);
-    const { rows: people } = await pool.query<{ email: string; id: string }>(
-      `SELECT DISTINCT p.email, p.id
-       FROM profiles p
-       WHERE p.status = 'active' AND (
-         p.id = $2 OR p.id IN (SELECT author_id FROM question_comments WHERE question_id = $1)
-       )`,
-      [questionId, question.author_id],
-    );
-    await sendEmail({
-      to: people.filter((person) => person.id !== user.id).map((person) => person.email),
-      subject: `Reply: ${question.title}`,
-      text:
-        `${user.display_name} replied.\n\n${body}\n\n${appLink(back)}\n`,
-    });
+    if (question.author_id !== user.id) {
+      const { rows: authors } = await pool.query<{ email: string }>(
+        `SELECT email FROM profiles WHERE id = $1 AND status = 'active'`,
+        [question.author_id],
+      );
+      const author = authors[0];
+      if (author) {
+        await notifyMany([
+          {
+            recipientId: question.author_id,
+            email: author.email,
+            kind: "question_reply",
+            title: `Reply: ${question.title}`,
+            body: `${user.display_name} replied.\n\n${body}`,
+            href: back,
+            eventKey: `question:${question.id}:reply:${commentId}:${question.author_id}`,
+          },
+        ]);
+      }
+    }
   } catch (error) {
     go(back, errorMessage(error));
   }
@@ -436,30 +448,46 @@ export async function openVote(formData: FormData) {
   if (!Number.isFinite(qc) || !Number.isFinite(qd) || qc < 0 || qc > 100 || qd < 0 || qd > 100) {
     go("/area/votes/new", "Both quorums are percentages from 0 to 100.");
   }
+  let deadline: Date;
+  try {
+    deadline = parseClubDateTime(deadlineRaw);
+  } catch (error) {
+    go("/area/votes/new", errorMessage(error));
+  }
+  if (deadline.getTime() <= Date.now() + 48 * 60 * 60 * 1000) {
+    go("/area/votes/new", "A vote must stay open for longer than 48 hours, so both reminders can go out.");
+  }
   let voteId = "";
   try {
-    const deadline = parseClubDateTime(deadlineRaw);
     const { rows } = await pool.query<{ id: string }>(
       `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
       [admin.id, subject, description, deadline, qc, qd],
     );
     voteId = rows[0].id;
     await saveAttachments(formData, "vote", voteId, admin.id);
-    const { rows: people } = await pool.query<{ email: string }>(
-      `SELECT p.email FROM vote_electorate e JOIN profiles p ON p.id = e.profile_id WHERE e.vote_id = $1`,
-      [voteId],
+    const { rows: people } = await pool.query<{ id: string; email: string }>(
+      `SELECT p.id, p.email
+       FROM vote_electorate e
+       JOIN profiles p ON p.id = e.profile_id
+       WHERE e.vote_id = $1 AND p.id <> $2 AND p.status = 'active'`,
+      [voteId, admin.id],
     );
-    await sendEmail({
-      to: people.map((person) => person.email),
-      subject: `Vote open: ${subject}`,
-      text:
-        `A vote is open.\n\n${subject}\n\n${description}\n\n` +
-        `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
-        `Deliberative quorum: ${qd}% of votes cast in favour.\n` +
-        `Deadline: ${deadline.toISOString()}\n\n` +
-        `The vote is open: every member can see who voted what. A vote cannot be changed once cast.\n\n` +
-        `${appLink(`/area/votes/${voteId}`)}\n`,
-    });
+    await notifyMany(
+      people.map((person) => ({
+        recipientId: person.id,
+        email: person.email,
+        kind: "vote_opened",
+        title: `Vote open: ${subject}`,
+        body:
+          `A vote is open.\n\n${subject}\n\n${description}\n\n` +
+          `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
+          `Deliberative quorum: ${qd}% of votes cast in favour.\n` +
+          `Deadline: ${deadline.toISOString()}\n\n` +
+          `The vote is open: every member can see who voted what. A vote cannot be changed once cast.`,
+        href: `/area/votes/${voteId}`,
+        eventKey: `vote:${voteId}:opened:${person.id}`,
+      })),
+    );
   } catch (error) {
     go("/area/votes/new", errorMessage(error));
   }
@@ -587,4 +615,12 @@ export async function refreshClosedVotes() {
   const user = await getCurrentUser();
   if (!user) return;
   await closeDueVotes();
+}
+
+export async function markNotificationsRead() {
+  const user = await requireUser();
+  await pool.query(
+    `UPDATE notifications SET read_at = now() WHERE recipient_id = $1 AND read_at IS NULL`,
+    [user.id],
+  );
 }

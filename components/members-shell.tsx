@@ -2,24 +2,26 @@ import Link from "next/link";
 import { logout } from "@/lib/actions";
 import { initials, type Member } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { NotificationBell, type BellItem } from "./notification-bell";
 
 const LINKS = [
   { href: "/area", label: "Dashboard" },
   { href: "/area/documents", label: "Documents" },
-  { href: "/area/questions", label: "Questions" },
   { href: "/area/votes", label: "Votes" },
-  { href: "/area/profile", label: "Profile" },
-  { href: "/area/applications", label: "Applications" },
-  { href: "/area/export", label: "Export" },
+  { href: "/area/questions", label: "Questions" },
 ];
 
 export function MembersShell({
   user,
   pathname,
+  notifications,
+  unread,
   children,
 }: {
   user: Member;
   pathname: string;
+  notifications: BellItem[];
+  unread: number;
   children: React.ReactNode;
 }) {
   const links =
@@ -44,6 +46,7 @@ export function MembersShell({
               <Link href="/area/profile">
                 <span className="name">{user.display_name}</span>
               </Link>
+              <NotificationBell unread={unread} items={notifications} />
               <Link href="/area/profile" className="avatar" aria-label="Your profile">
                 {user.photo_key ? (
                   <img src={`/api/photos/${user.id}`} alt="" />
@@ -69,7 +72,9 @@ export function MembersShell({
         </header>
         {children}
         <p className="foot">
-          Email is how nocap reaches members. Votes are recorded with the time they were cast and cannot be changed once submitted.
+          <Link href="/area/how-it-works">How it works</Link>
+          {" · "}
+          The bell and email carry the same news. A vote cannot be changed once it is cast.
           {" "}
           <Link href="/">Public site</Link>
         </p>

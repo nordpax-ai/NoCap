@@ -6,7 +6,6 @@ const LINKS = [
   { href: "/about", label: "About" },
   { href: "/members", label: "Members" },
   { href: "/publications", label: "Publications" },
-  { href: "/membership", label: "Membership" },
 ];
 
 function Lock() {
@@ -19,10 +18,9 @@ function Lock() {
 }
 
 export function PublicShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
-  const dark = pathname === "/about";
   const contact = env.contactEmail();
   return (
-    <div className={dark ? "pub tone-dark" : "pub"}>
+    <div className="pub">
       <nav className="nav">
         <div className="wrap">
           <Link href="/" aria-label="nocap home">
@@ -59,7 +57,6 @@ export function PublicShell({ pathname, children }: { pathname: string; children
               <Link href="/about">About</Link>
               <Link href="/members">Members</Link>
               <Link href="/publications">Publications</Link>
-              <Link href="/membership">Membership</Link>
               <a href={`mailto:${contact}`}>Contact</a>
             </div>
           </div>

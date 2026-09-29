@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { pool } from "@/lib/db";
-import { formatShort } from "@/lib/time";
+import { formatShort, questionStatus } from "@/lib/time";
 
 export const metadata = { title: "Questions" };
 
@@ -26,12 +26,13 @@ export default async function QuestionsPage() {
       </div>
       <p className="help">Separate from votes. Anyone can open a question and anyone can reply.</p>
       {rows.map((question) => {
-        const open = !question.deadline || question.deadline.getTime() > Date.now();
+        const status = questionStatus(question.deadline);
         return (
           <article className="thread" key={question.id}>
             <div className="tags">
               <span className="tag">Question</span>
-              {!open ? <><span className="dot" /><span className="tag">Deadline passed</span></> : null}
+              <span className="dot" />
+              <span className={status.open ? "tag now" : "tag"}>{status.text}</span>
             </div>
             <Link className="title" href={`/area/questions/${question.id}`}>{question.title}</Link>
             <div className="by">

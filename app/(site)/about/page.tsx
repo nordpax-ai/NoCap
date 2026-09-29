@@ -6,19 +6,25 @@ export default function AboutPage() {
       <div className="eyebrow">About</div>
       <h1 className="pt">A circle, not a network.</h1>
       <p className="about-lede">
-        It started the way these things should: a group of lawyers who met working on deals across Europe and New York, kept in touch, and realised the contact list was worth more than any organisation they belonged to.
+        nocap is a private circle of deal lawyers across Europe. Small on purpose, by invitation, and built by the people in it.
       </p>
       <div className="about-grid">
         <div className="about-col">
+          <h3>What the name means</h3>
+          <p>
+            In an SPA, the cap is the ceiling on a party&apos;s liability. No cap: no ceiling. Everywhere else, “no cap” means “for real” - real relationships, not conference-badge networking. Both halves are the point.
+          </p>
+        </div>
+        <div className="about-col">
           <h3>Where we come from</h3>
           <p>
-            nocap was founded by a small group of European deal lawyers who had already been calling each other for years — for a fast read on a local issue, a name in another market, a second opinion nobody else could give. We decided to make it deliberate.
+            nocap started with lawyers across Europe who came to know and respect each other, and in time to trust each other. We decided to build something around it.
           </p>
         </div>
         <div className="about-col">
           <h3>What we&apos;re for</h3>
           <p>
-            To build genuine relationships between the people who will be running European transactions for the next twenty years, and to make those relationships useful: shared knowledge, individual visibility, and time spent together.
+            To build genuine relationships between the people who will be running transactions for the next twenty years, and to make those relationships valuable: shared knowledge, a name of your own and time spent together.
           </p>
         </div>
         <div className="about-col">

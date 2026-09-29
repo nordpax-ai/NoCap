@@ -22,8 +22,8 @@ export type VoteRecord = {
 
 const OUTCOME: Record<string, string> = {
   carried: "Carried",
-  not_carried: "Not carried",
-  invalid: "Invalid — constitutive quorum not met",
+  not_carried: "Not carried. Majority not reached.",
+  invalid: "Invalid. Constitutive quorum not reached (minimum participation).",
 };
 
 function wrap(text: string, width: number): string[] {
@@ -118,4 +118,10 @@ export function labelChoice(choice: string): string {
 
 export function outcomeLabel(outcome: string): string {
   return OUTCOME[outcome] ?? outcome;
+}
+
+export function failureReason(outcome: string | null): string | null {
+  if (outcome === "invalid") return "Constitutive quorum not reached (minimum participation).";
+  if (outcome === "not_carried") return "Majority not reached.";
+  return null;
 }

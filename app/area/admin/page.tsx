@@ -64,6 +64,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </tbody>
       </table>
       <p style={{ marginTop: 22 }}><a href="/area/publications/new">Add a publication</a></p>
+      <p><a href="/area/applications">Applications</a></p>
       <p><a href="/area/admin/outbox">Email outbox</a></p>
     </>
   );

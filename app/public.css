@@ -96,14 +96,13 @@
 .pub.tone-dark h1.pt { color: var(--paper); max-width: 820px; }
 .pub .about-lede {
   font-family: var(--serif); font-style: italic; font-size: clamp(21px, 2.7vw, 30px);
-  line-height: 1.4; color: var(--periw); max-width: 800px; margin: 0 0 60px;
+  line-height: 1.4; color: var(--ink-soft); max-width: 800px; margin: 0 0 48px;
 }
-.pub .about-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid rgba(255, 255, 255, 0.14); }
-.pub .about-col { padding: 38px 34px 0 0; border-right: 1px solid rgba(255, 255, 255, 0.14); }
-.pub .about-col:last-child { border-right: none; padding-right: 0; }
-.pub .about-col:not(:first-child) { padding-left: 34px; }
-.pub .about-col h3 { font-family: var(--display); font-size: 19px; font-weight: 600; color: var(--paper); margin: 0 0 13px; }
-.pub .about-col p { font-size: 16px; color: #cbd3dd; line-height: 1.62; margin: 0; }
+.pub .about-grid { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.pub .about-col { padding: 32px 34px 28px 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.pub .about-col:nth-child(2n) { border-right: none; padding-right: 0; padding-left: 34px; }
+.pub .about-col h3 { font-family: var(--display); font-size: 19px; font-weight: 600; color: var(--ink); margin: 0 0 13px; }
+.pub .about-col p { font-size: 16px; color: var(--ink-soft); line-height: 1.62; margin: 0; }
 .pub .mem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 46px; }
 .pub .mem { background: #fff; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; color: var(--ink); }
 .pub .mem-photo { aspect-ratio: 4/3; display: flex; align-items: flex-end; padding: 20px; position: relative; }
@@ -194,9 +193,8 @@
 }
 @media (max-width: 820px) {
   .pub .about-grid, .pub .mb-steps { grid-template-columns: 1fr; }
-  .pub .about-col, .pub .mb-step { border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.14); padding: 24px 0; }
-  .pub .mb-step { border-bottom-color: var(--line); }
-  .pub .about-col:not(:first-child), .pub .mb-step:not(:first-child) { padding-left: 0; }
+  .pub .about-col, .pub .mb-step { border-right: none; border-bottom: 1px solid var(--line); padding: 24px 0; }
+  .pub .about-col:nth-child(2n), .pub .about-col:not(:first-child), .pub .mb-step:not(:first-child) { padding-left: 0; }
   .pub .about-col:last-child, .pub .mb-step:last-child { border-bottom: none; }
 }
 @media (max-width: 620px) {

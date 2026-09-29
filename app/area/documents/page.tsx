@@ -131,6 +131,14 @@ export default async function DocumentsPage({
           {area === "shared" ? null : null}
         </>
       ) : null}
+
+      <div className="head" id="export" style={{ marginTop: 36 }}>
+        <div className="eyebrow">Export</div>
+      </div>
+      <p className="help">
+        Download every document, in every version, and the resolutions register. The archive is a zip of files and a JSON copy of the votes. It does not depend on the host once you have it.
+      </p>
+      <a className="btn solid" href="/api/export">Download everything</a>
     </>
   );
 }

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { remindQuestion, replyToQuestion } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { formatWhen } from "@/lib/time";
+import { formatWhen, questionStatus } from "@/lib/time";
 
 export default async function QuestionPage({
   params,
@@ -48,10 +48,15 @@ export default async function QuestionPage({
         OR (parent_type = 'comment' AND parent_id = ANY($2::uuid[]))`,
     [id, comments.map((comment) => comment.id)],
   );
+  const status = questionStatus(question.deadline);
   return (
     <>
       <article className="thread">
-        <div className="tags"><span className="tag">Question</span></div>
+        <div className="tags">
+          <span className="tag">Question</span>
+          <span className="dot" />
+          <span className={status.open ? "tag now" : "tag"}>{status.text}</span>
+        </div>
         <h1 className="title">{question.title}</h1>
         <div className="by">{question.author} · {formatWhen(question.created_at)}</div>
         {question.deadline ? <div className="by">Deadline {formatWhen(question.deadline)}</div> : null}

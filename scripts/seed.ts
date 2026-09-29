@@ -321,7 +321,7 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
     description: "Example closed vote. The code of conduct circulated on 18 August is put to the members.",
     qc: 50,
     qd: 50,
-    deadline: new Date(Date.now() + 86_400_000).toISOString(),
+    deadline: new Date(Date.now() + 73 * 60 * 60 * 1000).toISOString(),
     votes: [
       ...["Paolo Piccirilli", "Elena Rossi", "Lukas Brandt", "Sofie Jansen", "Camille Baptiste", "Andrés Vidal", "Erik Lindqvist"].map(
         (name) => ({ name, choice: "for" as const, at: "2026-08-18T16:00:00Z" }),
@@ -342,9 +342,28 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
       "Example closed vote. One member voted. The constitutive quorum was 90 percent, so the result is invalid whatever the votes say.",
     qc: 90,
     qd: 50,
-    deadline: new Date(Date.now() + 86_400_000).toISOString(),
+    deadline: new Date(Date.now() + 73 * 60 * 60 * 1000).toISOString(),
     votes: [{ name: "Paolo Piccirilli", choice: "for", at: "2026-09-01T10:00:00Z" }],
     close: { opened: "2026-09-01T09:00:00Z", closed: "2026-09-01T18:00:00Z" },
+  });
+
+  await openAndMaybeClose({
+    subject: "Example: majority not reached",
+    description:
+      "Example closed vote. Everyone voted. The constitutive quorum was met, and the share in favour was below the deliberative quorum, so the majority was not reached.",
+    qc: 50,
+    qd: 80,
+    deadline: new Date(Date.now() + 73 * 60 * 60 * 1000).toISOString(),
+    votes: [
+      { name: "Paolo Piccirilli", choice: "for", at: "2026-09-02T10:00:00Z" },
+      { name: "Elena Rossi", choice: "for", at: "2026-09-02T10:05:00Z" },
+      { name: "Lukas Brandt", choice: "for", at: "2026-09-02T10:10:00Z" },
+      { name: "Sofie Jansen", choice: "for", at: "2026-09-02T10:15:00Z" },
+      { name: "Camille Baptiste", choice: "against", at: "2026-09-02T10:20:00Z" },
+      { name: "Andrés Vidal", choice: "against", at: "2026-09-02T10:25:00Z" },
+      { name: "Erik Lindqvist", choice: "against", at: "2026-09-02T10:30:00Z" },
+    ],
+    close: { opened: "2026-09-02T09:00:00Z", closed: "2026-09-02T18:00:00Z" },
   });
 
   await openAndMaybeClose({
@@ -353,7 +372,9 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
       "Example vote, still open. Nomination of a corporate M&A senior associate in Stockholm, proposed by Elena and seconded by Lukas. The CV in this example is not a real document. Admission in this example uses the quorums set below, not a rule copied from a charter.",
     qc: 50,
     qd: 67,
-    deadline: "2026-10-15T18:00:00+02:00",
+    deadline: new Date(
+      Math.max(Date.parse("2026-10-15T18:00:00+02:00"), Date.now() + 73 * 60 * 60 * 1000),
+    ).toISOString(),
     votes: [
       { name: "Elena Rossi", choice: "for" },
       { name: "Lukas Brandt", choice: "for" },

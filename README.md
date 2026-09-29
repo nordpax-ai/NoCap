@@ -60,12 +60,14 @@ Sign-in is at `/login`. There is no open signup.
 
 - **Profile.** Photo, firm, city, practice area, contacts, and the role, biography and jurisdiction shown on the public members page. Firm is not published.
 - **Documents.** Official register (admin uploads) and shared folder (any member uploads). Versions, title search, download, and a zip of the ticked files.
-- **Questions.** Any member opens one. Replies are comments, with attachments and an optional deadline. Opening emails every active member. A reply emails the people already in the thread. The author can send a reminder.
-- **Votes.** An admin opens a vote with a subject, a description, attachments, a deadline, and two quorums. Eligible voters are the active members at that moment, and the list does not change. Choices are For, Against and Abstain. The vote is open: everyone can see who voted what. A ballot cannot be edited. While the vote is open the page shows who has voted, who has not, and the deadline. The admin can remind people who have not voted.
-- **Close.** At the deadline the vote closes when someone next opens the reserved area, downloads a record, or runs a full export, and on Netlify a scheduled function closes due votes every 10 minutes. Constitutive quorum is the share of eligible voters who cast a ballot. Abstentions count as participation. Deliberative quorum is the share of For among votes cast, and abstentions are part of that count. If the constitutive quorum is not met, the outcome is invalid. The page states the outcome and the counts. It does not interpret them.
-- **Record.** Each closed vote has a PDF: subject, eligible voters, each named vote with the time it was cast, the quorums, and the outcome.
-- **Applications.** The public membership form emails the Founding Committee and stores the application, including the CV, for members.
-- **Export.** `/area/export` downloads every document version and the resolutions register.
+- **Questions.** Any member opens one. Replies are comments, with attachments and an optional deadline. The list shows Open or Closed beside the question, and the deadline when one is set. Opening notifies the other members (bell and email). A reply notifies the member who opened the question, unless they wrote the reply. The author can still send a manual reminder by email.
+- **Votes.** An admin opens a vote with a subject, a description, attachments, a deadline, and two quorums. The deadline has to be more than 48 hours away, so both automatic reminders can go out. Eligible voters are the active members at that moment, and the list does not change. Choices are For, Against and Abstain. The vote is open: everyone can see who voted what. A ballot cannot be edited. While the vote is open the page shows who has voted, who has not, and the deadline. The dashboard shows the count and the closing date. The admin can remind people who have not voted.
+- **Close.** At the deadline the vote closes when someone next opens the reserved area, downloads a record, or runs a full export, and on Netlify a scheduled function does the same every 10 minutes. That job also sends the 48-hour and 24-hour reminders while the vote is still open. Constitutive quorum is the share of eligible voters who cast a ballot. Abstentions count as participation. Deliberative quorum is the share of For among votes cast, and abstentions are part of that count. If the constitutive quorum is not met, the outcome is invalid and the page and PDF say the constitutive quorum was not reached. If it was met but the majority was not, they say the majority was not reached.
+- **Record.** Each closed vote has a PDF: subject, eligible voters, each named vote with the time it was cast, the quorums, the outcome, and, when the vote did not pass, why.
+- **Notifications.** The same events go to the bell and to email, immediately, except the two reminders, which are scheduled. A member is not notified about their own question, reply or vote. The unread count clears when the bell is opened. Each item links to that question or vote. With `EMAIL_PROVIDER=log`, the messages are in `/area/admin/outbox`.
+- **Applications.** Stored applications stay in the reserved area, linked from the admin page. There is no public membership page.
+- **Export.** The foot of Documents downloads every document version and the resolutions register.
+- **How it works.** `/area/how-it-works`, linked from the members' footer.
 
 Closed votes and resolutions cannot be updated or deleted, including by the database owner. That is enforced with triggers and grants, not only by hiding buttons.
 
@@ -130,7 +132,7 @@ Demo sign-in after seeding:
 | Admin | `paolo.piccirilli@example.invalid` | `example-password` |
 | Member | `elena.rossi@example.invalid` | `example-password` |
 
-Votes close in two ways. A scheduled function, `netlify/functions/close-votes.ts`, runs every 10 minutes and calls `private.close_due_votes()`. Opening the reserved area, or downloading a vote record, also closes anything that is already due. The reserved area shows a small **Demo · example data** marker.
+Votes close in two ways. A scheduled function, `netlify/functions/close-votes.ts`, runs every 10 minutes. It sends the 48-hour and 24-hour reminders for open votes, then closes anything already due and notifies members of the outcome. Opening the reserved area, or downloading a vote record, runs the same job. Each reminder is stored once per member, so a repeat run does not send it again. The reserved area shows a small **Demo · example data** marker.
 
 Logged mail is not sent. The admin reads it at `/area/admin/outbox`. Files are stored in Netlify Blobs.
 
@@ -152,7 +154,7 @@ A production layout on a host you choose:
 2. **App.** Any Node host in the EU (a small VM, Fly.io `fra`, or a container platform with an EU region). `npm run build && npm run start`. Set `APP_URL` to `https://nocap-law.com` once that domain is connected. It is not connected yet.
 3. **Files.** `STORAGE_PROVIDER=s3` with an EU bucket. For Supabase Storage use the project's S3 endpoint and `S3_REGION=eu-central-1`. Or keep `STORAGE_PROVIDER=local` on a disk that is backed up.
 4. **Email.** Set `EMAIL_PROVIDER=smtp` and the `SMTP_*` variables. The provider is an open choice; pick one that processes mail in the EU if that is a requirement.
-5. **Clock.** A scheduled `POST /api/jobs/close-votes` every few minutes closes votes whose deadline has passed even if nobody visits. The reserved area also closes them on the next request.
+5. **Clock.** A scheduled `POST /api/jobs/close-votes` every few minutes sends vote reminders and closes votes whose deadline has passed even if nobody visits. The reserved area runs the same job on the next request.
 6. **Secrets.** Only through the environment. Start from `.env.example`. Use long random values for `CRON_SECRET` and the database passwords.
 
 The future public domain is `nocap-law.com`. Contact addresses in the example env file are placeholders.
@@ -170,7 +172,6 @@ Restoring is: create an empty database, `psql` the dump, put the files back unde
 
 These are not decided by the specification. They are implemented in a way that is easy to change.
 
-- **Copy the spec does not mention.** The membership page still says membership is "capped per firm and per jurisdiction", and the steps still say "Committee" and "Secretary". Those words come from the mockup.
 - **Publication detail.** A publication has a page and an optional PDF. Whether the real format is a page, a PDF, or both is open.
 - **Placeholders to replace.** Example member names, biographies and the absence of real photos. Example publications. The privacy policy, which is marked as a draft and is not legal advice. The logo is the mockup PNG, not a vector master. `CONTACT_EMAIL` and `FOUNDING_COMMITTEE_EMAIL`.
 - **Account and domain ownership.** `nocap-law.com` is not connected. No hosting account has been created by this repository.

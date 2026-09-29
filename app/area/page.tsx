@@ -2,7 +2,7 @@ import Link from "next/link";
 import { DocIcon } from "@/components/members-shell";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
-import { formatShort, formatWhen } from "@/lib/time";
+import { formatShort, questionStatus } from "@/lib/time";
 import { outcomeLabel } from "@/lib/pdf";
 
 export default async function DashboardPage() {
@@ -36,9 +36,13 @@ export default async function DashboardPage() {
       against_count: number | null;
       abstain_count: number | null;
       author: string;
+      ballots: number;
+      eligible: number;
     }>(
       `SELECT v.id, v.subject, v.status, v.deadline, v.opened_at, v.outcome,
-              v.for_count, v.against_count, v.abstain_count, p.display_name AS author
+              v.for_count, v.against_count, v.abstain_count, p.display_name AS author,
+              (SELECT count(*)::int FROM ballots b WHERE b.vote_id = v.id) AS ballots,
+              (SELECT count(*)::int FROM vote_electorate e WHERE e.vote_id = v.id) AS eligible
        FROM votes v JOIN profiles p ON p.id = v.opened_by
        ORDER BY (v.status = 'open') DESC, v.opened_at DESC
        LIMIT 6`,
@@ -79,21 +83,6 @@ export default async function DashboardPage() {
       </div>
 
       <div className="head">
-        <div className="eyebrow">Questions</div>
-        <Link className="act" href="/area/questions/new">Ask a question</Link>
-      </div>
-      {questions.rows.length === 0 ? <p className="muted">No open questions.</p> : null}
-      {questions.rows.map((question) => (
-        <article className="thread" key={question.id}>
-          <div className="tags"><span className="tag">Question</span></div>
-          <Link className="title" href={`/area/questions/${question.id}`}>{question.title}</Link>
-          <div className="by">
-            {question.author} · {formatShort(question.created_at)} · {question.replies} {question.replies === 1 ? "reply" : "replies"}
-          </div>
-        </article>
-      ))}
-
-      <div className="head" style={{ marginTop: 36 }}>
         <div className="eyebrow">Votes</div>
         {user.role === "admin" ? <Link className="act" href="/area/votes/new">Open a vote</Link> : <Link className="act" href="/area/votes">All votes</Link>}
       </div>
@@ -101,18 +90,42 @@ export default async function DashboardPage() {
         <article className={vote.status === "open" ? "thread open" : "thread"} key={vote.id}>
           <div className="tags">
             <span className={vote.status === "open" ? "tag now" : "tag"}>{vote.status === "open" ? "Vote open" : "Closed"}</span>
-            <span className="dot" />
-            <span className="tag">{vote.status === "open" ? `Closes ${formatShort(vote.deadline)}` : formatShort(vote.opened_at)}</span>
           </div>
           <Link className="title" href={`/area/votes/${vote.id}`}>{vote.subject}</Link>
-          <div className="by">{vote.author} · {formatShort(vote.opened_at)}</div>
+          {vote.status === "open" ? (
+            <div className="by">{vote.ballots} of {vote.eligible} voted · closes {formatShort(vote.deadline)}</div>
+          ) : (
+            <div className="by">{vote.author} · {formatShort(vote.opened_at)}</div>
+          )}
           {vote.status === "closed" && vote.outcome ? (
             <div className="result">
-              {outcomeLabel(vote.outcome)} — {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
+              {outcomeLabel(vote.outcome)} {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
             </div>
           ) : null}
         </article>
       ))}
+
+      <div className="head" style={{ marginTop: 36 }}>
+        <div className="eyebrow">Questions</div>
+        <Link className="act" href="/area/questions/new">Ask a question</Link>
+      </div>
+      {questions.rows.length === 0 ? <p className="muted">No open questions.</p> : null}
+      {questions.rows.map((question) => {
+        const status = questionStatus(question.deadline);
+        return (
+          <article className="thread" key={question.id}>
+            <div className="tags">
+              <span className="tag">Question</span>
+              <span className="dot" />
+              <span className={status.open ? "tag now" : "tag"}>{status.text}</span>
+            </div>
+            <Link className="title" href={`/area/questions/${question.id}`}>{question.title}</Link>
+            <div className="by">
+              {question.author} · {formatShort(question.created_at)} · {question.replies} {question.replies === 1 ? "reply" : "replies"}
+            </div>
+          </article>
+        );
+      })}
       <p className="muted" style={{ marginTop: 8 }}>Signed in as {user.display_name}. Open questions are the ones without a passed deadline.</p>
     </>
   );

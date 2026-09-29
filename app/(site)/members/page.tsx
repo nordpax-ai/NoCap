@@ -36,7 +36,7 @@ export default async function MembersPage() {
       <div className="eyebrow">Members</div>
       <h1 className="pt">The people, not the letterheads.</h1>
       <p className="lede">
-        Membership is personal. It belongs to the member, travels with them if they move, and says nothing about their firm.
+        Twelve lawyers across eight European jurisdictions, working on M&amp;A, private equity, venture capital and corporate transactions - with their story, their practice, their market and the firm they sit in.
       </p>
       {examples ? (
         <p className="note" style={{ marginTop: 28 }}>

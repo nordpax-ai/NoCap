@@ -130,7 +130,7 @@ export default async function VotePage({
         ) : (
           <div>
             <div className="result">
-              {outcomeLabel(vote.outcome || "")} — {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
+              {outcomeLabel(vote.outcome || "")} {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
             </div>
             <p className="by">
               Constitutive quorum {vote.constitutive_met ? "met" : "not met"} ({vote.voted_count} of {vote.eligible_count} voted).

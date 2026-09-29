@@ -47,7 +47,7 @@ export default async function VotesPage() {
           <div className="by">{vote.author} · {vote.voted} of {vote.eligible} voted</div>
           {vote.status === "closed" && vote.outcome ? (
             <div className="result">
-              {outcomeLabel(vote.outcome)} — {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
+              {outcomeLabel(vote.outcome)} {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
             </div>
           ) : null}
         </article>

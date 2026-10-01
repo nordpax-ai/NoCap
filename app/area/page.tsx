@@ -3,7 +3,7 @@ import { DocIcon } from "@/components/members-shell";
 import { requireUser } from "@/lib/auth";
 import { fetchDashboard } from "@/lib/area-data";
 import { formatShort, questionStatus } from "@/lib/time";
-import { outcomeLabel } from "@/lib/pdf";
+import { closedVoteLine } from "@/lib/poll";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -43,6 +43,12 @@ export default async function DashboardPage() {
         <article className={vote.status === "open" ? "thread open" : "thread"} key={vote.id}>
           <div className="tags">
             <span className={vote.status === "open" ? "tag now" : "tag"}>{vote.status === "open" ? "Vote open" : "Closed"}</span>
+            {vote.kind === "poll" ? (
+              <>
+                <span className="dot" />
+                <span className="tag">Poll</span>
+              </>
+            ) : null}
           </div>
           <Link className="title" href={`/area/votes/${vote.id}`}>{vote.subject}</Link>
           {vote.status === "open" ? (
@@ -51,9 +57,7 @@ export default async function DashboardPage() {
             <div className="by">{vote.author} · {formatShort(vote.opened_at)}</div>
           )}
           {vote.status === "closed" && vote.outcome ? (
-            <div className="result">
-              {outcomeLabel(vote.outcome)} {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
-            </div>
+            <div className="result">{closedVoteLine(vote)}</div>
           ) : null}
         </article>
       ))}

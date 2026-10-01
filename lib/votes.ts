@@ -2,8 +2,22 @@ import { pool } from "./db";
 import { logServerError } from "./log";
 import { notifyMany } from "./notify";
 import { failureReason, outcomeLabel, buildVoteRecordPdf, type VoteRecord } from "./pdf";
+import { formatPollCounts, joinLabels, leadingTie } from "./poll";
 import { storageExists, storageGet, storagePut } from "./storage";
 import { formatWhen } from "./time";
+
+function closedNotice(record: VoteRecord): string {
+  if (record.kind === "poll") {
+    const counts = formatPollCounts(record.options, record.votedCount);
+    const tie = record.constitutiveMet ? leadingTie(record.options) : [];
+    const tieText = tie.length ? ` Tie: ${joinLabels(tie)}.` : "";
+    return `${outcomeLabel(record.outcome)} ${counts}.${tieText}`;
+  }
+  const why = failureReason(record.outcome);
+  return why
+    ? `${outcomeLabel(record.outcome)} ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstentions.`
+    : `${outcomeLabel(record.outcome)}. ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstentions.`;
+}
 
 const HOUR = 60 * 60 * 1000;
 
@@ -53,13 +67,15 @@ export async function loadVoteRecord(voteId: string): Promise<VoteRecord | null>
     against_count: number;
     abstain_count: number;
     constitutive_met: boolean;
-    deliberative_met: boolean;
+    deliberative_met: boolean | null;
     outcome: string;
+    kind: "standard" | "poll";
+    allow_multiple: boolean;
   }>(
     `SELECT subject, description, opened_at, closed_at, deadline,
             quorum_constitutive, quorum_deliberative,
             eligible_count, voted_count, for_count, against_count, abstain_count,
-            constitutive_met, deliberative_met, outcome
+            constitutive_met, deliberative_met, outcome, kind, allow_multiple
      FROM votes WHERE id = $1 AND status = 'closed'`,
     [voteId],
   );
@@ -71,12 +87,31 @@ export async function loadVoteRecord(voteId: string): Promise<VoteRecord | null>
     choice: string | null;
     cast_at: Date | null;
   }>(
-    `SELECT p.display_name, p.email, b.choice, b.cast_at
+    `SELECT p.display_name, p.email,
+            CASE
+              WHEN v.kind = 'poll' THEN (
+                SELECT string_agg(o.label, ', ' ORDER BY o.position)
+                FROM poll_answers a
+                JOIN vote_options o ON o.id = a.option_id
+                WHERE a.vote_id = e.vote_id AND a.voter_id = e.profile_id
+              )
+              ELSE b.choice
+            END AS choice,
+            COALESCE(b.cast_at, pb.cast_at) AS cast_at
      FROM vote_electorate e
+     JOIN votes v ON v.id = e.vote_id
      JOIN profiles p ON p.id = e.profile_id
      LEFT JOIN ballots b ON b.vote_id = e.vote_id AND b.voter_id = e.profile_id
+     LEFT JOIN poll_ballots pb ON pb.vote_id = e.vote_id AND pb.voter_id = e.profile_id
      WHERE e.vote_id = $1
      ORDER BY p.display_name`,
+    [voteId],
+  );
+  const { rows: options } = await pool.query<{ label: string; count: number }>(
+    `SELECT o.label, (SELECT count(*)::int FROM poll_answers a WHERE a.option_id = o.id) AS count
+     FROM vote_options o
+     WHERE o.vote_id = $1
+     ORDER BY o.position`,
     [voteId],
   );
   return {
@@ -95,6 +130,9 @@ export async function loadVoteRecord(voteId: string): Promise<VoteRecord | null>
     constitutiveMet: vote.constitutive_met,
     deliberativeMet: vote.deliberative_met,
     outcome: vote.outcome,
+    kind: vote.kind,
+    allowMultiple: vote.allow_multiple,
+    options,
     voters: voters.map((voter) => ({
       name: voter.display_name,
       email: voter.email,
@@ -148,6 +186,9 @@ async function sendVoteReminder(
        AND NOT EXISTS (
          SELECT 1 FROM ballots b WHERE b.vote_id = e.vote_id AND b.voter_id = e.profile_id
        )
+       AND NOT EXISTS (
+         SELECT 1 FROM poll_ballots pb WHERE pb.vote_id = e.vote_id AND pb.voter_id = e.profile_id
+       )
      ORDER BY p.display_name`,
     [vote.id],
   );
@@ -186,10 +227,7 @@ async function sendVoteReminder(
 async function notifyVoteClosed(voteId: string): Promise<void> {
   const record = await loadVoteRecord(voteId);
   if (!record) return;
-  const why = failureReason(record.outcome);
-  const summary = why
-    ? `${outcomeLabel(record.outcome)} ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstentions.`
-    : `${outcomeLabel(record.outcome)}. ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstentions.`;
+  const summary = closedNotice(record);
   const { rows } = await pool.query<{ id: string; email: string }>(
     `SELECT id, email FROM profiles WHERE status = 'active'`,
   );

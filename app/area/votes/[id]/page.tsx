@@ -4,7 +4,18 @@ import { castVote, remindVoters } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { labelChoice, outcomeLabel } from "@/lib/pdf";
+import { formatPollCounts, joinLabels, leadingTie } from "@/lib/poll";
 import { formatWhen } from "@/lib/time";
+
+type OptionRow = { id: string; label: string; count: number };
+type ChoiceRow = { option_id: string; label: string };
+type RollRow = {
+  profile_id: string;
+  display_name: string;
+  choice: string | null;
+  choices: ChoiceRow[] | null;
+  cast_at: string | null;
+};
 
 export default async function VotePage({
   params,
@@ -21,6 +32,8 @@ export default async function VotePage({
     subject: string;
     description: string;
     status: string;
+    kind: "standard" | "poll";
+    allow_multiple: boolean;
     deadline: Date;
     opened_at: Date;
     closed_at: Date | null;
@@ -35,23 +48,47 @@ export default async function VotePage({
     constitutive_met: boolean | null;
     deliberative_met: boolean | null;
     author: string;
-    roll: { profile_id: string; display_name: string; choice: string | null; cast_at: string | null }[] | null;
+    roll: RollRow[] | null;
+    options: OptionRow[] | null;
     files: { id: string; filename: string }[] | null;
   }>(
-    `SELECT v.id, v.subject, v.description, v.status, v.deadline, v.opened_at, v.closed_at,
+    `SELECT v.id, v.subject, v.description, v.status, v.kind, v.allow_multiple,
+            v.deadline, v.opened_at, v.closed_at,
             v.quorum_constitutive, v.quorum_deliberative, v.outcome,
             v.for_count, v.against_count, v.abstain_count, v.eligible_count, v.voted_count,
             v.constitutive_met, v.deliberative_met, p.display_name AS author,
             COALESCE((
               SELECT json_agg(json_build_object(
-                       'profile_id', e.profile_id, 'display_name', ep.display_name,
-                       'choice', b.choice, 'cast_at', b.cast_at
-                     ) ORDER BY (b.choice IS NULL), ep.display_name)
+                       'profile_id', e.profile_id,
+                       'display_name', ep.display_name,
+                       'choice', b.choice,
+                       'choices', COALESCE((
+                         SELECT json_agg(json_build_object('option_id', o.id, 'label', o.label) ORDER BY o.position)
+                         FROM poll_answers a
+                         JOIN vote_options o ON o.id = a.option_id
+                         WHERE a.vote_id = e.vote_id AND a.voter_id = e.profile_id
+                       ), '[]'::json),
+                       'cast_at', COALESCE(b.cast_at, pb.cast_at)
+                     ) ORDER BY (
+                       b.choice IS NULL AND NOT EXISTS (
+                         SELECT 1 FROM poll_ballots pb2
+                         WHERE pb2.vote_id = e.vote_id AND pb2.voter_id = e.profile_id
+                       )
+                     ), ep.display_name)
               FROM vote_electorate e
               JOIN profiles ep ON ep.id = e.profile_id
               LEFT JOIN ballots b ON b.vote_id = e.vote_id AND b.voter_id = e.profile_id
+              LEFT JOIN poll_ballots pb ON pb.vote_id = e.vote_id AND pb.voter_id = e.profile_id
               WHERE e.vote_id = v.id
             ), '[]'::json) AS roll,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'id', o.id, 'label', o.label,
+                       'count', (SELECT count(*)::int FROM poll_answers a WHERE a.option_id = o.id)
+                     ) ORDER BY o.position)
+              FROM vote_options o
+              WHERE o.vote_id = v.id
+            ), '[]'::json) AS options,
             COALESCE((
               SELECT json_agg(json_build_object('id', a.id, 'filename', a.filename) ORDER BY a.filename)
               FROM attachments a
@@ -64,18 +101,30 @@ export default async function VotePage({
   );
   const vote = rows[0];
   if (!vote) notFound();
+  const poll = vote.kind === "poll";
   const roll = vote.roll ?? [];
+  const options = vote.options ?? [];
   const files = vote.files ?? [];
   const mine = roll.find((person) => person.profile_id === user.id);
-  const voted = roll.filter((person) => person.choice);
-  const waiting = roll.filter((person) => !person.choice);
+  const answered = (person: RollRow) => (poll ? (person.choices?.length ?? 0) > 0 : Boolean(person.choice));
+  const choiceText = (person: RollRow) =>
+    poll ? (person.choices ?? []).map((choice) => choice.label).join(", ") : person.choice ? labelChoice(person.choice) : "";
+  const voted = roll.filter(answered);
+  const waiting = roll.filter((person) => !answered(person));
   const open = vote.status === "open";
+  const tie = !open && vote.constitutive_met ? leadingTie(options) : [];
 
   return (
     <>
       <article className={open ? "thread open" : "thread"}>
         <div className="tags">
           <span className={open ? "tag now" : "tag"}>{open ? "Vote open" : "Closed"}</span>
+          {poll ? (
+            <>
+              <span className="dot" />
+              <span className="tag">Poll</span>
+            </>
+          ) : null}
           <span className="dot" />
           <span className="tag">{open ? `Closes ${formatWhen(vote.deadline)}` : `Closed ${formatWhen(vote.closed_at || vote.deadline)}`}</span>
         </div>
@@ -83,8 +132,17 @@ export default async function VotePage({
         <div className="by">{vote.author} · {formatWhen(vote.opened_at)}</div>
         <p className="body">{vote.description}</p>
         <p className="by">
-          Constitutive quorum {vote.quorum_constitutive}% · deliberative quorum {vote.quorum_deliberative}%
+          Constitutive quorum {vote.quorum_constitutive}%
+          {poll
+            ? " · the deliberative quorum does not apply"
+            : ` · deliberative quorum ${vote.quorum_deliberative}%`}
         </p>
+        {poll ? (
+          <p className="by">
+            {vote.allow_multiple ? "A voter may pick more than one option." : "Each voter picks one option."}
+            {" "}There is no abstain choice. A member who does not answer has not voted.
+          </p>
+        ) : null}
         {files.length ? (
           <p className="by">
             {files.map((file) => (
@@ -93,7 +151,7 @@ export default async function VotePage({
           </p>
         ) : null}
 
-        {open && mine && !mine.choice ? (
+        {open && mine && !answered(mine) && !poll ? (
           <div className="ballot">
             {(["for", "against", "abstain"] as const).map((choice) => (
               <form action={castVote} key={choice}>
@@ -104,8 +162,25 @@ export default async function VotePage({
             ))}
           </div>
         ) : null}
-        {mine?.choice ? (
-          <p className="cast">Recorded: {labelChoice(mine.choice)} · {mine.cast_at ? formatWhen(mine.cast_at) : ""}</p>
+        {open && mine && !answered(mine) && poll ? (
+          <form action={castVote} className="poll-options">
+            <input type="hidden" name="vote_id" value={vote.id} />
+            {options.map((option) => (
+              <label className="poll-option" key={option.id}>
+                <input
+                  type={vote.allow_multiple ? "checkbox" : "radio"}
+                  name="option_id"
+                  value={option.id}
+                  required={!vote.allow_multiple}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+            <button className="btn solid" type="submit">Cast vote</button>
+          </form>
+        ) : null}
+        {mine && answered(mine) ? (
+          <p className="cast">Recorded: {choiceText(mine)} · {mine.cast_at ? formatWhen(mine.cast_at) : ""}</p>
         ) : null}
         {open && !mine ? <p className="by">You are not on the frozen list of eligible voters.</p> : null}
         {error ? <p className="error">{error}</p> : null}
@@ -118,8 +193,8 @@ export default async function VotePage({
             </div>
             <div className="names">
               {roll.map((person) => (
-                <span className={person.choice ? "chip yes" : "chip wait"} key={person.profile_id}>
-                  {person.display_name}{person.choice ? ` · ${labelChoice(person.choice)}` : ""}
+                <span className={answered(person) ? "chip yes" : "chip wait"} key={person.profile_id}>
+                  {person.display_name}{answered(person) ? ` · ${choiceText(person)}` : ""}
                 </span>
               ))}
             </div>
@@ -136,16 +211,25 @@ export default async function VotePage({
         ) : (
           <div>
             <div className="result">
-              {outcomeLabel(vote.outcome || "")} {vote.for_count} for, {vote.against_count} against, {vote.abstain_count} abstention{vote.abstain_count === 1 ? "" : "s"}
+              {outcomeLabel(vote.outcome || "")}{" "}
+              {poll
+                ? formatPollCounts(options, vote.voted_count ?? voted.length)
+                : `${vote.for_count} for, ${vote.against_count} against, ${vote.abstain_count} abstention${vote.abstain_count === 1 ? "" : "s"}`}
             </div>
+            {tie.length ? <p className="by">Tie: {joinLabels(tie)}.</p> : null}
             <p className="by">
               Constitutive quorum {vote.constitutive_met ? "met" : "not met"} ({vote.voted_count} of {vote.eligible_count} voted).
-              Deliberative quorum {vote.deliberative_met ? "met" : "not met"}.
+              {poll
+                ? " The deliberative quorum does not apply to a poll."
+                : ` Deliberative quorum ${vote.deliberative_met ? "met" : "not met"}.`}
             </p>
+            {poll && vote.allow_multiple ? (
+              <p className="by">Shares are of the people who voted. Someone who picks more than one option is counted in each option.</p>
+            ) : null}
             <div className="names" style={{ margin: "12px 0" }}>
               {roll.map((person) => (
-                <span className={person.choice ? "chip yes" : "chip wait"} key={person.profile_id}>
-                  {person.display_name}{person.choice ? ` · ${labelChoice(person.choice)}` : " · did not vote"}
+                <span className={answered(person) ? "chip yes" : "chip wait"} key={person.profile_id}>
+                  {person.display_name}{answered(person) ? ` · ${choiceText(person)}` : " · did not vote"}
                 </span>
               ))}
             </div>

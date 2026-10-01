@@ -64,7 +64,7 @@ export async function buildFullExport(): Promise<Buffer> {
     zip.file(`resolutions/${stamp}-${part(vote.subject)}.pdf`, pdf);
   }
 
-  const [votes, ballots, electorate, resolutions] = await Promise.all([
+  const [votes, ballots, electorate, resolutions, options, pollBallots, pollAnswers] = await Promise.all([
     pool.query(`SELECT * FROM votes ORDER BY opened_at`),
     pool.query(
       `SELECT b.*, p.display_name, p.email
@@ -75,6 +75,16 @@ export async function buildFullExport(): Promise<Buffer> {
        FROM vote_electorate e JOIN profiles p ON p.id = e.profile_id ORDER BY p.display_name`,
     ),
     pool.query(`SELECT * FROM resolutions ORDER BY closed_at`),
+    pool.query(`SELECT * FROM vote_options ORDER BY vote_id, position`),
+    pool.query(
+      `SELECT b.*, p.display_name, p.email
+       FROM poll_ballots b JOIN profiles p ON p.id = b.voter_id ORDER BY b.cast_at`,
+    ),
+    pool.query(
+      `SELECT a.*, o.label
+       FROM poll_answers a JOIN vote_options o ON o.id = a.option_id
+       ORDER BY a.vote_id, o.position`,
+    ),
   ]);
 
   zip.file(
@@ -87,6 +97,9 @@ export async function buildFullExport(): Promise<Buffer> {
         electorate: electorate.rows,
         ballots: ballots.rows,
         resolutions: resolutions.rows,
+        voteOptions: options.rows,
+        pollBallots: pollBallots.rows,
+        pollAnswers: pollAnswers.rows,
       },
       null,
       2,

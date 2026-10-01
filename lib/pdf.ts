@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { formatPollCounts, joinLabels, leadingTie } from "./poll";
 import { formatWhen } from "./time";
 
 export type VoteRecord = {
@@ -15,8 +16,11 @@ export type VoteRecord = {
   againstCount: number;
   abstainCount: number;
   constitutiveMet: boolean;
-  deliberativeMet: boolean;
+  deliberativeMet: boolean | null;
   outcome: string;
+  kind: "standard" | "poll";
+  allowMultiple: boolean;
+  options: { label: string; count: number }[];
   voters: { name: string; email: string; choice: string | null; castAt: Date | null }[];
 };
 
@@ -24,6 +28,7 @@ const OUTCOME: Record<string, string> = {
   carried: "Carried",
   not_carried: "Not carried. Majority not reached.",
   invalid: "Invalid. Constitutive quorum not reached (minimum participation).",
+  recorded: "Recorded.",
 };
 
 function wrap(text: string, width: number): string[] {
@@ -85,25 +90,42 @@ export async function buildVoteRecordPdf(record: VoteRecord): Promise<Buffer> {
   y -= 6;
   const participation =
     record.eligibleCount === 0 ? 0 : Math.round((record.votedCount / record.eligibleCount) * 1000) / 10;
-  const forShare = record.votedCount === 0 ? 0 : Math.round((record.forCount / record.votedCount) * 1000) / 10;
   draw("Quorums applied", { bold: true, size: 12, gap: 4 });
-  draw(
-    `Constitutive quorum: ${record.quorumConstitutive}% of eligible voters. ` +
-      `${record.votedCount} of ${record.eligibleCount} voted (${participation}%). ` +
-      `Abstentions count as participation. ${record.constitutiveMet ? "Met." : "Not met."}`,
-  );
-  draw(
-    `Deliberative quorum: ${record.quorumDeliberative}% of votes cast in favour. ` +
-      `${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstain ` +
-      `(${forShare}% for). ${record.deliberativeMet ? "Met." : "Not met."}`,
-    { gap: 8 },
-  );
-  draw(`Outcome: ${OUTCOME[record.outcome] ?? record.outcome}`, { bold: true, size: 13 });
-  draw(
-    `Counts: ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstention` +
-      (record.abstainCount === 1 ? "" : "s") +
-      ".",
-  );
+  if (record.kind === "poll") {
+    draw(
+      `Constitutive quorum: ${record.quorumConstitutive}% of eligible voters. ` +
+        `${record.votedCount} of ${record.eligibleCount} voted (${participation}%). ` +
+        `A member who does not answer has not voted. ${record.constitutiveMet ? "Met." : "Not met."}`,
+    );
+    draw("The deliberative quorum does not apply to a poll.", { gap: 8 });
+    const counts = formatPollCounts(record.options, record.votedCount);
+    const tie = record.constitutiveMet ? leadingTie(record.options) : [];
+    draw(`Outcome: ${OUTCOME[record.outcome] ?? record.outcome}`, { bold: true, size: 13 });
+    draw(`Counts: ${counts}.`);
+    if (tie.length) draw(`Tie: ${joinLabels(tie)}.`);
+    if (record.allowMultiple) {
+      draw("Shares are of the people who voted. Someone who picks more than one option is counted in each option.");
+    }
+  } else {
+    const forShare = record.votedCount === 0 ? 0 : Math.round((record.forCount / record.votedCount) * 1000) / 10;
+    draw(
+      `Constitutive quorum: ${record.quorumConstitutive}% of eligible voters. ` +
+        `${record.votedCount} of ${record.eligibleCount} voted (${participation}%). ` +
+        `Abstentions count as participation. ${record.constitutiveMet ? "Met." : "Not met."}`,
+    );
+    draw(
+      `Deliberative quorum: ${record.quorumDeliberative}% of votes cast in favour. ` +
+        `${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstain ` +
+        `(${forShare}% for). ${record.deliberativeMet ? "Met." : "Not met."}`,
+      { gap: 8 },
+    );
+    draw(`Outcome: ${OUTCOME[record.outcome] ?? record.outcome}`, { bold: true, size: 13 });
+    draw(
+      `Counts: ${record.forCount} for, ${record.againstCount} against, ${record.abstainCount} abstention` +
+        (record.abstainCount === 1 ? "" : "s") +
+        ".",
+    );
+  }
 
   const bytes = await doc.save();
   return Buffer.from(bytes);

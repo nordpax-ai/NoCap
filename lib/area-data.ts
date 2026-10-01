@@ -83,6 +83,8 @@ export type DashboardVote = {
   author: string;
   ballots: number;
   eligible: number;
+  kind: string;
+  poll_summary: string | null;
 };
 
 export async function fetchDashboard(): Promise<{
@@ -116,7 +118,7 @@ export async function fetchDashboard(): Promise<{
        (SELECT count(*)::int FROM documents WHERE area = 'register' AND category = 'minutes') AS minutes,
        (
          (SELECT count(*)::int FROM documents WHERE category = 'resolution')
-         + (SELECT count(*)::int FROM votes WHERE status = 'closed')
+         + (SELECT count(*)::int FROM votes WHERE status = 'closed' AND kind = 'standard')
        ) AS resolutions,
        COALESCE((
          SELECT json_agg(json_build_object(
@@ -136,13 +138,23 @@ export async function fetchDashboard(): Promise<{
                   'id', v.id, 'subject', v.subject, 'status', v.status, 'deadline', v.deadline,
                   'opened_at', v.opened_at, 'outcome', v.outcome, 'for_count', v.for_count,
                   'against_count', v.against_count, 'abstain_count', v.abstain_count,
-                  'author', v.author, 'ballots', v.ballots, 'eligible', v.eligible
+                  'author', v.author, 'ballots', v.ballots, 'eligible', v.eligible,
+                  'kind', v.kind, 'poll_summary', v.poll_summary
                 ) ORDER BY (v.status = 'open') DESC, v.opened_at DESC)
          FROM (
            SELECT v.id, v.subject, v.status, v.deadline, v.opened_at, v.outcome,
-                  v.for_count, v.against_count, v.abstain_count, p.display_name AS author,
-                  (SELECT count(*)::int FROM ballots b WHERE b.vote_id = v.id) AS ballots,
-                  (SELECT count(*)::int FROM vote_electorate e WHERE e.vote_id = v.id) AS eligible
+                  v.for_count, v.against_count, v.abstain_count, p.display_name AS author, v.kind,
+                  (SELECT count(*)::int FROM ballots b WHERE b.vote_id = v.id)
+                    + (SELECT count(*)::int FROM poll_ballots pb WHERE pb.vote_id = v.id) AS ballots,
+                  (SELECT count(*)::int FROM vote_electorate e WHERE e.vote_id = v.id) AS eligible,
+                  (
+                    SELECT string_agg(
+                      o.label || ' ' || (SELECT count(*)::int FROM poll_answers a WHERE a.option_id = o.id)::text,
+                      ', ' ORDER BY o.position
+                    )
+                    FROM vote_options o
+                    WHERE o.vote_id = v.id
+                  ) AS poll_summary
            FROM votes v
            JOIN profiles p ON p.id = v.opened_by
            ORDER BY (v.status = 'open') DESC, v.opened_at DESC

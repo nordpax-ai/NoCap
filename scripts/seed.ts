@@ -383,6 +383,46 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
     ],
   });
 
+  const pollId = (
+    await client.query<{ id: string }>(
+      `SELECT private.open_poll($1, $2, $3, $4::timestamptz, $5, false, $6::text[]) AS id`,
+      [
+        adminId,
+        "Example poll: where should the annual meeting be held?",
+        "Example poll. One choice. The result is the count for each place, not a for-or-against resolution.",
+        new Date(Date.now() + 73 * 60 * 60 * 1000).toISOString(),
+        50,
+        ["Rome", "Milan", "A video call"],
+      ],
+    )
+  ).rows[0].id;
+  const pollVotes: [string, string, string][] = [
+    ["Paolo Piccirilli", "Rome", "2026-09-11T10:00:00Z"],
+    ["Elena Rossi", "Rome", "2026-09-11T10:05:00Z"],
+    ["Lukas Brandt", "Milan", "2026-09-11T10:10:00Z"],
+    ["Sofie Jansen", "Milan", "2026-09-11T10:15:00Z"],
+    ["Camille Baptiste", "A video call", "2026-09-11T10:20:00Z"],
+    ["Andrés Vidal", "A video call", "2026-09-11T10:25:00Z"],
+  ];
+  await client.query(`SELECT set_config('nocap.poll_write', 'on', true)`);
+  for (const [name, label, at] of pollVotes) {
+    await client.query(
+      `INSERT INTO poll_ballots (vote_id, voter_id, cast_at) VALUES ($1, $2, $3::timestamptz)`,
+      [pollId, ids.get(name), at],
+    );
+    await client.query(
+      `INSERT INTO poll_answers (vote_id, voter_id, option_id)
+       SELECT $1, $2, id FROM vote_options WHERE vote_id = $1 AND label = $3`,
+      [pollId, ids.get(name), label],
+    );
+  }
+  await client.query(`SELECT set_config('nocap.poll_write', 'off', true)`);
+  await client.query(`SELECT private.seed_close_vote($1, $2::timestamptz, $3::timestamptz)`, [
+    pollId,
+    "2026-09-10T09:00:00Z",
+    "2026-09-12T18:00:00Z",
+  ]);
+
   const inviteToken = randomBytes(32).toString("base64url");
   const inviteHash = createHash("sha256").update(inviteToken).digest("hex");
   await client.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [

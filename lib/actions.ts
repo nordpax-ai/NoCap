@@ -438,14 +438,25 @@ export async function remindQuestion(formData: FormData) {
 
 export async function openVote(formData: FormData) {
   const admin = await requireAdmin();
+  const kind = String(formData.get("kind") || "standard");
   const subject = String(formData.get("subject") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const deadlineRaw = String(formData.get("deadline") || "").trim();
   const qc = Number(formData.get("quorum_constitutive"));
   const qd = Number(formData.get("quorum_deliberative"));
+  const poll = kind === "poll";
+  const options = formData.getAll("option_label").map((value) => String(value).trim());
+  const allowMultiple = formData.get("allow_multiple") === "on";
+  if (kind !== "standard" && kind !== "poll") go("/area/votes/new", "Choose a standard vote or a poll.");
   if (!subject || !description || !deadlineRaw) go("/area/votes/new", "Subject, description and deadline are required.");
-  if (!Number.isFinite(qc) || !Number.isFinite(qd) || qc < 0 || qc > 100 || qd < 0 || qd > 100) {
+  if (!Number.isFinite(qc) || qc < 0 || qc > 100) {
+    go("/area/votes/new", "The constitutive quorum is a percentage from 0 to 100.");
+  }
+  if (!poll && (!Number.isFinite(qd) || qd < 0 || qd > 100)) {
     go("/area/votes/new", "Both quorums are percentages from 0 to 100.");
+  }
+  if (poll && (options.length < 2 || options.length > 10)) {
+    go("/area/votes/new", "A poll needs between 2 and 10 options.");
   }
   let deadline: Date;
   try {
@@ -458,11 +469,19 @@ export async function openVote(formData: FormData) {
   }
   let voteId = "";
   try {
-    const { rows } = await pool.query<{ id: string }>(
-      `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
-      [admin.id, subject, description, deadline, qc, qd],
-    );
-    voteId = rows[0].id;
+    if (poll) {
+      const { rows } = await pool.query<{ id: string }>(
+        `SELECT private.open_poll($1, $2, $3, $4, $5, $6, $7) AS id`,
+        [admin.id, subject, description, deadline, qc, allowMultiple, options],
+      );
+      voteId = rows[0].id;
+    } else {
+      const { rows } = await pool.query<{ id: string }>(
+        `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
+        [admin.id, subject, description, deadline, qc, qd],
+      );
+      voteId = rows[0].id;
+    }
     await saveAttachments(formData, "vote", voteId, admin.id);
     const { rows: people } = await pool.query<{ id: string; email: string }>(
       `SELECT p.id, p.email
@@ -471,6 +490,13 @@ export async function openVote(formData: FormData) {
        WHERE e.vote_id = $1 AND p.id <> $2 AND p.status = 'active'`,
       [voteId, admin.id],
     );
+    const rules = poll
+      ? `Constitutive quorum: ${qc}% of eligible voters. A member who does not answer has not voted.\n` +
+        `The deliberative quorum does not apply.\n` +
+        `Options: ${options.join("; ")}.\n` +
+        (allowMultiple ? `More than one option may be chosen.\n` : `Each voter chooses one option.\n`)
+      : `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
+        `Deliberative quorum: ${qd}% of votes cast in favour.\n`;
     await notifyMany(
       people.map((person) => ({
         recipientId: person.id,
@@ -479,8 +505,7 @@ export async function openVote(formData: FormData) {
         title: `Vote open: ${subject}`,
         body:
           `A vote is open.\n\n${subject}\n\n${description}\n\n` +
-          `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
-          `Deliberative quorum: ${qd}% of votes cast in favour.\n` +
+          rules +
           `Deadline: ${deadline.toISOString()}\n\n` +
           `The vote is open: every member can see who voted what. A vote cannot be changed once cast.`,
         href: `/area/votes/${voteId}`,
@@ -499,21 +524,35 @@ export async function castVote(formData: FormData) {
   await closeDueVotes();
   const voteId = String(formData.get("vote_id") || "");
   const choice = String(formData.get("choice") || "");
+  const optionIds = formData.getAll("option_id").map((value) => String(value)).filter(Boolean);
   const back = `/area/votes/${voteId}`;
-  if (!["for", "against", "abstain"].includes(choice)) go(back, "Choose for, against or abstain.");
   try {
-    const { rows } = await pool.query(
-      `SELECT 1 FROM vote_electorate WHERE vote_id = $1 AND profile_id = $2`,
-      [voteId, user.id],
+    const { rows } = await pool.query<{ kind: string }>(
+      `SELECT kind FROM votes WHERE id = $1`,
+      [voteId],
     );
-    if (!rows[0]) go(back, "You are not on the list of eligible voters for this vote.");
-    await pool.query(
-      `INSERT INTO ballots (vote_id, voter_id, choice) VALUES ($1, $2, $3)`,
-      [voteId, user.id, choice],
-    );
+    const vote = rows[0];
+    if (!vote) go(back, "That vote does not exist.");
+    if (vote.kind === "poll") {
+      if (optionIds.length === 0) go(back, "Choose at least one option.");
+      await pool.query(`SELECT private.cast_poll($1, $2, $3)`, [user.id, voteId, optionIds]);
+    } else {
+      if (!["for", "against", "abstain"].includes(choice)) go(back, "Choose for, against or abstain.");
+      const eligible = await pool.query(
+        `SELECT 1 FROM vote_electorate WHERE vote_id = $1 AND profile_id = $2`,
+        [voteId, user.id],
+      );
+      if (!eligible.rows[0]) go(back, "You are not on the list of eligible voters for this vote.");
+      await pool.query(
+        `INSERT INTO ballots (vote_id, voter_id, choice) VALUES ($1, $2, $3)`,
+        [voteId, user.id, choice],
+      );
+    }
   } catch (error) {
     const message = errorMessage(error);
-    if (/duplicate key/i.test(message)) go(back, "You have already voted. A vote cannot be changed.");
+    if (/duplicate key/i.test(message) || /already voted/i.test(message)) {
+      go(back, "You have already voted. A vote cannot be changed.");
+    }
     go(back, message);
   }
   revalidatePath(back);
@@ -535,7 +574,8 @@ export async function remindVoters(formData: FormData) {
      FROM vote_electorate e
      JOIN profiles p ON p.id = e.profile_id
      WHERE e.vote_id = $1
-       AND NOT EXISTS (SELECT 1 FROM ballots b WHERE b.vote_id = e.vote_id AND b.voter_id = e.profile_id)`,
+       AND NOT EXISTS (SELECT 1 FROM ballots b WHERE b.vote_id = e.vote_id AND b.voter_id = e.profile_id)
+       AND NOT EXISTS (SELECT 1 FROM poll_ballots pb WHERE pb.vote_id = e.vote_id AND pb.voter_id = e.profile_id)`,
     [voteId],
   );
   if (rows.length === 0) go(`/area/votes/${voteId}`, "Everyone eligible has voted.");

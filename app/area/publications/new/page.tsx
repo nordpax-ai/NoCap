@@ -1,3 +1,5 @@
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { createPublication } from "@/lib/actions";
 import { requireAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
@@ -15,7 +17,7 @@ export default async function NewPublicationPage({ searchParams }: { searchParam
       <h1 className="page-title">New publication</h1>
       <p className="help">Publications are opened on the chair&apos;s indication. The public page shows the category, author and date. A detail page and an optional PDF are the current format, which is still an open decision.</p>
       {error ? <p className="error">{error}</p> : null}
-      <form action={createPublication} className="stack">
+      <ActionForm action={createPublication} className="stack">
         <div>
           <label className="lbl" htmlFor="title">Title</label>
           <input id="title" name="title" required />
@@ -49,8 +51,8 @@ export default async function NewPublicationPage({ searchParams }: { searchParam
           <label className="lbl" htmlFor="pdf">PDF, optional</label>
           <input id="pdf" name="pdf" type="file" accept="application/pdf" />
         </div>
-        <button className="btn solid" type="submit">Publish</button>
-      </form>
+        <SubmitButton className="btn solid">Publish</SubmitButton>
+      </ActionForm>
     </>
   );
 }

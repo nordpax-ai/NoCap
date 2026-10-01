@@ -13,12 +13,12 @@ export default function HowItWorksPage() {
 
       <h2>Questions</h2>
       <p className="help">
-        Any member can open a question. Replies are comments, and a deadline is optional. With no deadline the question stays open. Once a deadline has passed it is marked closed. Opening a question notifies the other members. A reply notifies the member who opened the question. You are not notified about something you posted yourself. The author can still send a manual reminder.
+        Any member can open a question. Replies are comments, and a deadline is optional. With no deadline the question stays open. Once a deadline has passed it is marked closed. Opening a question notifies the other members. A reply notifies the member who opened the question. You are not notified about something you posted yourself. The author can still send a manual reminder. The member who asked a question can delete it, including after the deadline. The page asks “Delete this question? This cannot be undone.” Deleting it removes the replies, the attachments and the bell entries, so those links do not remain.
       </p>
 
       <h2>Votes</h2>
       <p className="help">
-        Only an admin opens a vote. It has to stay open for longer than 48 hours, so a reminder can go out 48 hours before the deadline and again 24 hours before, to members who have not voted. Admins receive those reminders as well, with the names of who is still outstanding. Eligible voters are the active members at the moment the vote opens, and that list does not change afterwards. While the vote is open, everyone can see who voted what. A vote cannot be changed once it is cast.
+        Only an admin opens a vote. It has to stay open for longer than 48 hours, so a reminder can go out 48 hours before the deadline and again 24 hours before, to members who have not voted. Admins receive those reminders as well, with the names of who is still outstanding. Eligible voters are the active members at the moment the vote opens, and that list does not change afterwards. While the vote is open, everyone can see who voted what. A vote cannot be changed once it is cast. The admin who opened a vote can delete it while it is still open. The page asks “Delete this vote? This cannot be undone.” That removes the ballots, the options, the attachments and the bell entries, including reminders that have already been sent. A later reminder is not sent, because the vote is gone. If that admin is no longer on the list, any admin can delete the open vote. A closed vote cannot be edited or deleted.
       </p>
       <p className="help">
         The constitutive quorum is the minimum share of eligible voters who must take part. Abstentions count as participation. If fewer people vote than that share requires, the vote does not pass because the constitutive quorum (minimum participation) was not reached.

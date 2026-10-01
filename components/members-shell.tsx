@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { logout } from "@/lib/actions";
 import { initials, type Member } from "@/lib/auth";
 import { NotificationBell, type BellItem } from "./notification-bell";
@@ -52,9 +54,9 @@ export function MembersShell({
                   initials(user.display_name)
                 )}
               </Link>
-              <form action={logout}>
-                <button className="act" type="submit">Sign out</button>
-              </form>
+              <ActionForm action={logout}>
+                <SubmitButton className="act">Sign out</SubmitButton>
+              </ActionForm>
             </div>
           </div>
           <nav className="subnav" aria-label="Members' area">

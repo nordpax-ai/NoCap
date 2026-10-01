@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { remindQuestion, replyToQuestion } from "@/lib/actions";
+import { ActionForm } from "@/components/action-form";
+import { DeleteControl } from "@/components/delete-control";
+import { SubmitButton } from "@/components/submit-button";
+import { deleteQuestion, remindQuestion, replyToQuestion } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { formatWhen, questionStatus } from "@/lib/time";
@@ -70,13 +73,22 @@ export default async function QuestionPage({
         {question.deadline ? <div className="by">Deadline {formatWhen(question.deadline)}</div> : null}
         <p className="body">{question.body}</p>
         <FileLinks files={files.filter((file) => file.parent_id === question.id)} />
+        {question.author_id === user.id ? (
+          <DeleteControl
+            action={deleteQuestion}
+            label="Delete this question"
+            confirm="Delete this question? This cannot be undone."
+            hidden={{ question_id: question.id }}
+            buttonId="delete-question"
+          />
+        ) : null}
       </article>
       {reminded ? <p className="banner">Reminder sent.</p> : null}
       {question.author_id === user.id ? (
-        <form action={remindQuestion}>
+        <ActionForm action={remindQuestion}>
           <input type="hidden" name="question_id" value={question.id} />
-          <button className="nudge" type="submit">Send a reminder</button>
-        </form>
+          <SubmitButton className="nudge">Send a reminder</SubmitButton>
+        </ActionForm>
       ) : null}
       <div className="head" style={{ marginTop: 28 }}><div className="eyebrow">Replies</div></div>
       {comments.map((comment) => (
@@ -87,7 +99,7 @@ export default async function QuestionPage({
         </div>
       ))}
       {error ? <p className="error">{error}</p> : null}
-      <form action={replyToQuestion} className="stack" style={{ marginTop: 18 }}>
+      <ActionForm action={replyToQuestion} className="stack" style={{ marginTop: 18 }}>
         <input type="hidden" name="question_id" value={question.id} />
         <div>
           <label className="lbl" htmlFor="body">Reply</label>
@@ -97,8 +109,8 @@ export default async function QuestionPage({
           <label className="lbl" htmlFor="attachments">Attachment</label>
           <input id="attachments" name="attachments" type="file" multiple />
         </div>
-        <button className="btn solid" type="submit">Reply</button>
-      </form>
+        <SubmitButton className="btn solid">Reply</SubmitButton>
+      </ActionForm>
       <p style={{ marginTop: 18 }}><Link href="/area/questions">All questions</Link></p>
     </>
   );

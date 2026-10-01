@@ -3,7 +3,8 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { pool, errorMessage } from "./db";
+import { pool, errorMessage, withTx } from "./db";
+import { existingCreate, fileMark, fingerprint, formToken, rememberCreate } from "./idempotency";
 import {
   checkPassword,
   clearSession,
@@ -19,13 +20,36 @@ import {
 import { appLink, sendEmail } from "./email";
 import { notifyMany } from "./notify";
 import { env } from "./env";
-import { readUpload, safeFilename, storagePut } from "./storage";
+import { readUpload, safeFilename, storageDelete, storagePut } from "./storage";
+import type { PoolClient } from "pg";
 import { parseClubDateTime } from "./time";
 import { closeDueVotes } from "./votes";
 
 function go(path: string, error?: string): never {
   const url = error ? `${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error)}` : path;
   redirect(url);
+}
+
+async function guardedCreate(
+  actorId: string,
+  action: string,
+  token: string | null,
+  print: string,
+  create: (client: PoolClient) => Promise<string>,
+): Promise<{ id: string; duplicate: boolean }> {
+  return withTx(async (client) => {
+    const existing = await existingCreate(client, actorId, action, token, print);
+    if (existing) return { id: existing, duplicate: true };
+    const id = await create(client);
+    await rememberCreate(client, actorId, action, token, print, id);
+    return { id, duplicate: false };
+  });
+}
+
+async function removeStored(keys: string[] | null): Promise<void> {
+  for (const key of keys ?? []) {
+    if (key) await storageDelete(key);
+  }
 }
 
 export async function login(formData: FormData) {
@@ -195,24 +219,31 @@ export async function inviteMember(formData: FormData) {
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     go("/area/admin", "Enter a name and a valid email.");
   }
-  const { token, hash } = newToken();
+  const submit = formToken(formData);
+  const print = fingerprint(["invite", email, name]);
+  let inviteToken = "";
   try {
-    await pool.query(`SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days')`, [
-      admin.id,
-      email,
-      name,
-      hash,
-    ]);
-    await sendEmail({
-      to: [email],
-      subject: "You are invited to nocap",
-      text:
-        `Hello ${name},\n\n` +
-        `You have been invited to the nocap members' area. Use the link below to choose a password. ` +
-        `It expires in 14 days.\n\n` +
-        `${appLink(`/join/${token}`)}\n\n` +
-        `There is no open signup. This link is only for you.\n`,
+    const outcome = await guardedCreate(admin.id, "invite", submit, print, async (client) => {
+      const created = newToken();
+      inviteToken = created.token;
+      const { rows } = await client.query<{ invite_member: string }>(
+        `SELECT private.invite_member($1, $2, $3, $4, now() + interval '14 days') AS invite_member`,
+        [admin.id, email, name, created.hash],
+      );
+      return rows[0].invite_member;
     });
+    if (!outcome.duplicate) {
+      await sendEmail({
+        to: [email],
+        subject: "You are invited to nocap",
+        text:
+          `Hello ${name},\n\n` +
+          `You have been invited to the nocap members' area. Use the link below to choose a password. ` +
+          `It expires in 14 days.\n\n` +
+          `${appLink(`/join/${inviteToken}`)}\n\n` +
+          `There is no open signup. This link is only for you.\n`,
+      });
+    }
   } catch (error) {
     go("/area/admin", errorMessage(error));
   }
@@ -239,18 +270,32 @@ export async function uploadShared(formData: FormData) {
   if (!title) go("/area/documents?area=shared", "Give the document a title.");
   try {
     const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
-    const documentId = randomUUID();
-    const key = `documents/${documentId}/v1-${file!.filename}`;
-    await storagePut(key, file!.buffer, file!.mime);
-    await pool.query(
-      `INSERT INTO documents (id, area, category, title, created_by) VALUES ($1, 'shared', 'shared', $2, $3)`,
-      [documentId, title, user.id],
-    );
-    await pool.query(
-      `INSERT INTO document_versions
-         (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
-       VALUES ($1, 1, $2, $3, $4, $5, $6)`,
-      [documentId, key, file!.filename, file!.mime, file!.size, user.id],
+    await guardedCreate(
+      user.id,
+      "document",
+      formToken(formData),
+      fingerprint(["shared", title, fileMark(file)]),
+      async (client) => {
+        const documentId = randomUUID();
+        const key = `documents/${documentId}/v1-${file!.filename}`;
+        await storagePut(key, file!.buffer, file!.mime);
+        try {
+          await client.query(
+            `INSERT INTO documents (id, area, category, title, created_by) VALUES ($1, 'shared', 'shared', $2, $3)`,
+            [documentId, title, user.id],
+          );
+          await client.query(
+            `INSERT INTO document_versions
+               (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
+             VALUES ($1, 1, $2, $3, $4, $5, $6)`,
+            [documentId, key, file!.filename, file!.mime, file!.size, user.id],
+          );
+        } catch (error) {
+          await storageDelete(key);
+          throw error;
+        }
+        return documentId;
+      },
     );
   } catch (error) {
     go("/area/documents?area=shared", errorMessage(error));
@@ -264,25 +309,39 @@ export async function uploadSharedVersion(formData: FormData) {
   const documentId = String(formData.get("document_id") || "");
   const back = `/area/documents/${documentId}`;
   try {
-    const { rows } = await pool.query<{ area: string; immutable: boolean }>(
-      `SELECT area, immutable FROM documents WHERE id = $1`,
-      [documentId],
-    );
-    const doc = rows[0];
-    if (!doc || doc.area !== "shared" || doc.immutable) throw new Error("That document cannot take a new version.");
     const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
-    const { rows: numbers } = await pool.query<{ n: number }>(
-      `SELECT (coalesce(max(version_number), 0) + 1)::int AS n FROM document_versions WHERE document_id = $1`,
-      [documentId],
-    );
-    const version = numbers[0].n;
-    const key = `documents/${documentId}/v${version}-${file!.filename}`;
-    await storagePut(key, file!.buffer, file!.mime);
-    await pool.query(
-      `INSERT INTO document_versions
-         (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [documentId, version, key, file!.filename, file!.mime, file!.size, user.id],
+    await guardedCreate(
+      user.id,
+      "document-version",
+      formToken(formData),
+      fingerprint(["shared-version", documentId, fileMark(file)]),
+      async (client) => {
+        const { rows } = await client.query<{ area: string; immutable: boolean }>(
+          `SELECT area, immutable FROM documents WHERE id = $1`,
+          [documentId],
+        );
+        const doc = rows[0];
+        if (!doc || doc.area !== "shared" || doc.immutable) throw new Error("That document cannot take a new version.");
+        const { rows: numbers } = await client.query<{ n: number }>(
+          `SELECT (coalesce(max(version_number), 0) + 1)::int AS n FROM document_versions WHERE document_id = $1`,
+          [documentId],
+        );
+        const version = numbers[0].n;
+        const key = `documents/${documentId}/v${version}-${file!.filename}`;
+        await storagePut(key, file!.buffer, file!.mime);
+        try {
+          await client.query(
+            `INSERT INTO document_versions
+               (document_id, version_number, storage_key, filename, mime_type, byte_size, uploaded_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [documentId, version, key, file!.filename, file!.mime, file!.size, user.id],
+          );
+        } catch (error) {
+          await storageDelete(key);
+          throw error;
+        }
+        return documentId;
+      },
     );
   } catch (error) {
     go(back, errorMessage(error));
@@ -299,24 +358,38 @@ export async function uploadRegister(formData: FormData) {
   if (!title && !existing) go("/area/documents", "Give the document a title.");
   try {
     const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
-    let documentId = existing;
-    if (!documentId) {
-      const { rows } = await pool.query<{ id: string }>(
-        `SELECT private.create_register_document($1, $2, $3) AS id`,
-        [admin.id, category, title],
-      );
-      documentId = rows[0].id;
-    }
-    const key = `documents/${documentId}/${randomUUID()}-${file!.filename}`;
-    await storagePut(key, file!.buffer, file!.mime);
-    await pool.query(`SELECT private.add_register_version($1, $2, $3, $4, $5, $6)`, [
+    await guardedCreate(
       admin.id,
-      documentId,
-      key,
-      file!.filename,
-      file!.mime,
-      file!.size,
-    ]);
+      existing ? "document-version" : "document",
+      formToken(formData),
+      fingerprint([existing || "register", category, title, fileMark(file)]),
+      async (client) => {
+        let documentId = existing;
+        if (!documentId) {
+          const { rows } = await client.query<{ id: string }>(
+            `SELECT private.create_register_document($1, $2, $3) AS id`,
+            [admin.id, category, title],
+          );
+          documentId = rows[0].id;
+        }
+        const key = `documents/${documentId}/${randomUUID()}-${file!.filename}`;
+        await storagePut(key, file!.buffer, file!.mime);
+        try {
+          await client.query(`SELECT private.add_register_version($1, $2, $3, $4, $5, $6)`, [
+            admin.id,
+            documentId,
+            key,
+            file!.filename,
+            file!.mime,
+            file!.size,
+          ]);
+        } catch (error) {
+          await storageDelete(key);
+          throw error;
+        }
+        return documentId;
+      },
+    );
   } catch (error) {
     go("/area/documents", errorMessage(error));
   }
@@ -335,30 +408,43 @@ export async function askQuestion(formData: FormData) {
     deadline = parseClubDateTime(deadlineRaw);
     if (deadline.getTime() <= Date.now()) go("/area/questions/new", "The deadline has to be in the future, or leave it blank.");
   }
-  const id = randomUUID();
+  let id = "";
   try {
-    await pool.query(
-      `INSERT INTO questions (id, author_id, title, body, deadline) VALUES ($1, $2, $3, $4, $5)`,
-      [id, user.id, title, body, deadline],
+    const outcome = await guardedCreate(
+      user.id,
+      "question",
+      formToken(formData),
+      fingerprint(["question", title, body, deadline ? deadline.toISOString() : ""]),
+      async (client) => {
+        const questionId = randomUUID();
+        await client.query(
+          `INSERT INTO questions (id, author_id, title, body, deadline) VALUES ($1, $2, $3, $4, $5)`,
+          [questionId, user.id, title, body, deadline],
+        );
+        return questionId;
+      },
     );
-    await saveAttachments(formData, "question", id, user.id);
-    const { rows } = await pool.query<{ id: string; email: string }>(
-      `SELECT id, email FROM profiles WHERE status = 'active' AND id <> $1`,
-      [user.id],
-    );
-    await notifyMany(
-      rows.map((person) => ({
-        recipientId: person.id,
-        email: person.email,
-        kind: "question_opened",
-        title: `Question: ${title}`,
-        body:
-          `${user.display_name} opened a question.\n\n${title}\n\n${body}` +
-          (deadline ? `\n\nDeadline: ${deadline.toISOString()}` : ""),
-        href: `/area/questions/${id}`,
-        eventKey: `question:${id}:opened:${person.id}`,
-      })),
-    );
+    id = outcome.id;
+    if (!outcome.duplicate) {
+      await saveAttachments(formData, "question", id, user.id);
+      const { rows } = await pool.query<{ id: string; email: string }>(
+        `SELECT id, email FROM profiles WHERE status = 'active' AND id <> $1`,
+        [user.id],
+      );
+      await notifyMany(
+        rows.map((person) => ({
+          recipientId: person.id,
+          email: person.email,
+          kind: "question_opened",
+          title: `Question: ${title}`,
+          body:
+            `${user.display_name} opened a question.\n\n${title}\n\n${body}` +
+            (deadline ? `\n\nDeadline: ${deadline.toISOString()}` : ""),
+          href: `/area/questions/${id}`,
+          eventKey: `question:${id}:opened:${person.id}`,
+        })),
+      );
+    }
   } catch (error) {
     go("/area/questions/new", errorMessage(error));
   }
@@ -379,30 +465,41 @@ export async function replyToQuestion(formData: FormData) {
     );
     const question = questions[0];
     if (!question) go("/area/questions", "That question no longer exists.");
-    const commentId = randomUUID();
-    await pool.query(
-      `INSERT INTO question_comments (id, question_id, author_id, body) VALUES ($1, $2, $3, $4)`,
-      [commentId, questionId, user.id, body],
+    const outcome = await guardedCreate(
+      user.id,
+      "reply",
+      formToken(formData),
+      fingerprint(["reply", questionId, body]),
+      async (client) => {
+        const commentId = randomUUID();
+        await client.query(
+          `INSERT INTO question_comments (id, question_id, author_id, body) VALUES ($1, $2, $3, $4)`,
+          [commentId, questionId, user.id, body],
+        );
+        return commentId;
+      },
     );
-    await saveAttachments(formData, "comment", commentId, user.id);
-    if (question.author_id !== user.id) {
-      const { rows: authors } = await pool.query<{ email: string }>(
-        `SELECT email FROM profiles WHERE id = $1 AND status = 'active'`,
-        [question.author_id],
-      );
-      const author = authors[0];
-      if (author) {
-        await notifyMany([
-          {
-            recipientId: question.author_id,
-            email: author.email,
-            kind: "question_reply",
-            title: `Reply: ${question.title}`,
-            body: `${user.display_name} replied.\n\n${body}`,
-            href: back,
-            eventKey: `question:${question.id}:reply:${commentId}:${question.author_id}`,
-          },
-        ]);
+    if (!outcome.duplicate) {
+      await saveAttachments(formData, "comment", outcome.id, user.id);
+      if (question.author_id !== user.id) {
+        const { rows: authors } = await pool.query<{ email: string }>(
+          `SELECT email FROM profiles WHERE id = $1 AND status = 'active'`,
+          [question.author_id],
+        );
+        const author = authors[0];
+        if (author) {
+          await notifyMany([
+            {
+              recipientId: question.author_id,
+              email: author.email,
+              kind: "question_reply",
+              title: `Reply: ${question.title}`,
+              body: `${user.display_name} replied.\n\n${body}`,
+              href: back,
+              eventKey: `question:${question.id}:reply:${outcome.id}:${question.author_id}`,
+            },
+          ]);
+        }
       }
     }
   } catch (error) {
@@ -469,49 +566,68 @@ export async function openVote(formData: FormData) {
   }
   let voteId = "";
   try {
-    if (poll) {
-      const { rows } = await pool.query<{ id: string }>(
-        `SELECT private.open_poll($1, $2, $3, $4, $5, $6, $7) AS id`,
-        [admin.id, subject, description, deadline, qc, allowMultiple, options],
+    const outcome = await guardedCreate(
+      admin.id,
+      "vote",
+      formToken(formData),
+      fingerprint([
+        kind,
+        subject,
+        description,
+        deadline.toISOString(),
+        qc,
+        poll ? null : qd,
+        poll ? options : [],
+        allowMultiple,
+      ]),
+      async (client) => {
+        if (poll) {
+          const { rows } = await client.query<{ id: string }>(
+            `SELECT private.open_poll($1, $2, $3, $4, $5, $6, $7) AS id`,
+            [admin.id, subject, description, deadline, qc, allowMultiple, options],
+          );
+          return rows[0].id;
+        }
+        const { rows } = await client.query<{ id: string }>(
+          `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
+          [admin.id, subject, description, deadline, qc, qd],
+        );
+        return rows[0].id;
+      },
+    );
+    voteId = outcome.id;
+    if (!outcome.duplicate) {
+      await saveAttachments(formData, "vote", voteId, admin.id);
+      const { rows: people } = await pool.query<{ id: string; email: string }>(
+        `SELECT p.id, p.email
+         FROM vote_electorate e
+         JOIN profiles p ON p.id = e.profile_id
+         WHERE e.vote_id = $1 AND p.id <> $2 AND p.status = 'active'`,
+        [voteId, admin.id],
       );
-      voteId = rows[0].id;
-    } else {
-      const { rows } = await pool.query<{ id: string }>(
-        `SELECT private.open_vote($1, $2, $3, $4, $5, $6) AS id`,
-        [admin.id, subject, description, deadline, qc, qd],
+      const rules = poll
+        ? `Constitutive quorum: ${qc}% of eligible voters. A member who does not answer has not voted.\n` +
+          `The deliberative quorum does not apply.\n` +
+          `Options: ${options.join("; ")}.\n` +
+          (allowMultiple ? `More than one option may be chosen.\n` : `Each voter chooses one option.\n`)
+        : `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
+          `Deliberative quorum: ${qd}% of votes cast in favour.\n`;
+      await notifyMany(
+        people.map((person) => ({
+          recipientId: person.id,
+          email: person.email,
+          kind: "vote_opened",
+          title: `Vote open: ${subject}`,
+          body:
+            `A vote is open.\n\n${subject}\n\n${description}\n\n` +
+            rules +
+            `Deadline: ${deadline.toISOString()}\n\n` +
+            `The vote is open: every member can see who voted what. A vote cannot be changed once cast.`,
+          href: `/area/votes/${voteId}`,
+          eventKey: `vote:${voteId}:opened:${person.id}`,
+        })),
       );
-      voteId = rows[0].id;
     }
-    await saveAttachments(formData, "vote", voteId, admin.id);
-    const { rows: people } = await pool.query<{ id: string; email: string }>(
-      `SELECT p.id, p.email
-       FROM vote_electorate e
-       JOIN profiles p ON p.id = e.profile_id
-       WHERE e.vote_id = $1 AND p.id <> $2 AND p.status = 'active'`,
-      [voteId, admin.id],
-    );
-    const rules = poll
-      ? `Constitutive quorum: ${qc}% of eligible voters. A member who does not answer has not voted.\n` +
-        `The deliberative quorum does not apply.\n` +
-        `Options: ${options.join("; ")}.\n` +
-        (allowMultiple ? `More than one option may be chosen.\n` : `Each voter chooses one option.\n`)
-      : `Constitutive quorum: ${qc}% of eligible voters (abstentions count as participation).\n` +
-        `Deliberative quorum: ${qd}% of votes cast in favour.\n`;
-    await notifyMany(
-      people.map((person) => ({
-        recipientId: person.id,
-        email: person.email,
-        kind: "vote_opened",
-        title: `Vote open: ${subject}`,
-        body:
-          `A vote is open.\n\n${subject}\n\n${description}\n\n` +
-          rules +
-          `Deadline: ${deadline.toISOString()}\n\n` +
-          `The vote is open: every member can see who voted what. A vote cannot be changed once cast.`,
-        href: `/area/votes/${voteId}`,
-        eventKey: `vote:${voteId}:opened:${person.id}`,
-      })),
-    );
   } catch (error) {
     go("/area/votes/new", errorMessage(error));
   }
@@ -587,6 +703,46 @@ export async function remindVoters(formData: FormData) {
       `${vote.subject}\n\n${appLink(`/area/votes/${voteId}`)}\n`,
   });
   redirect(`/area/votes/${voteId}?reminded=1`);
+}
+
+export async function deleteVote(formData: FormData) {
+  const admin = await requireAdmin();
+  const voteId = String(formData.get("vote_id") || "");
+  const back = `/area/votes/${voteId}`;
+  try {
+    const { rows } = await pool.query<{ delete_open_vote: string[] }>(
+      `SELECT private.delete_open_vote($1, $2) AS delete_open_vote`,
+      [admin.id, voteId],
+    );
+    await removeStored(rows[0]?.delete_open_vote ?? []);
+  } catch (error) {
+    const message = errorMessage(error);
+    if (/already been deleted/i.test(message)) redirect("/area/votes");
+    go(back, message);
+  }
+  revalidatePath("/area");
+  revalidatePath("/area/votes");
+  redirect("/area/votes");
+}
+
+export async function deleteQuestion(formData: FormData) {
+  const user = await requireUser();
+  const questionId = String(formData.get("question_id") || "");
+  const back = `/area/questions/${questionId}`;
+  try {
+    const { rows } = await pool.query<{ delete_question: string[] }>(
+      `SELECT private.delete_question($1, $2) AS delete_question`,
+      [user.id, questionId],
+    );
+    await removeStored(rows[0]?.delete_question ?? []);
+  } catch (error) {
+    const message = errorMessage(error);
+    if (/already been deleted/i.test(message)) redirect("/area/questions");
+    go(back, message);
+  }
+  revalidatePath("/area");
+  revalidatePath("/area/questions");
+  redirect("/area/questions");
 }
 
 export async function createPublication(formData: FormData) {

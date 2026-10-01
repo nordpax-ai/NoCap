@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, access } from "fs/promises";
+import { mkdir, readFile, writeFile, access, unlink } from "fs/promises";
 import path from "path";
 import { env } from "./env";
 
@@ -117,6 +117,32 @@ export async function storageGet(key: string): Promise<Buffer> {
     if (!generated) throw error;
     await storagePut(key, generated.body, generated.contentType).catch(() => undefined);
     return generated.body;
+  }
+}
+
+export async function storageDelete(key: string): Promise<void> {
+  const safe = assertKey(key);
+  try {
+    if (env.storageDriver() === "netlify-blobs") {
+      const store = await blobStore();
+      await store.delete(safe);
+      return;
+    }
+    if (env.storageDriver() === "s3") {
+      const { S3Client, DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+      const cfg = env.s3();
+      const client = new S3Client({
+        region: cfg.region,
+        endpoint: cfg.endpoint || undefined,
+        forcePathStyle: true,
+        credentials: { accessKeyId: cfg.accessKey, secretAccessKey: cfg.secretKey },
+      });
+      await client.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: safe }));
+      return;
+    }
+    await unlink(path.join(env.storageDir(), safe));
+  } catch (error) {
+    console.error("[storage] could not delete", safe, error instanceof Error ? error.message.split("\n")[0] : error);
   }
 }
 

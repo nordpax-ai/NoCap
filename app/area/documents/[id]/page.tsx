@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { uploadRegister, uploadSharedVersion } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
@@ -44,25 +46,25 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
         ))}
       </div>
       {!doc.immutable && doc.area === "register" && user.role === "admin" ? (
-        <form action={uploadRegister} className="stack">
+        <ActionForm action={uploadRegister} className="stack">
           <input type="hidden" name="document_id" value={doc.id} />
           <input type="hidden" name="title" value={doc.title} />
           <div>
             <label className="lbl" htmlFor="file">New version</label>
             <input id="file" name="file" type="file" required />
           </div>
-          <button className="btn" type="submit">Upload new version</button>
-        </form>
+          <SubmitButton className="btn">Upload new version</SubmitButton>
+        </ActionForm>
       ) : null}
       {!doc.immutable && doc.area === "shared" ? (
-        <form action={uploadSharedVersion} className="stack">
+        <ActionForm action={uploadSharedVersion} className="stack">
           <input type="hidden" name="document_id" value={doc.id} />
           <div>
             <label className="lbl" htmlFor="shared-version">New version</label>
             <input id="shared-version" name="file" type="file" required />
           </div>
-          <button className="btn" type="submit">Upload new version</button>
-        </form>
+          <SubmitButton className="btn">Upload new version</SubmitButton>
+        </ActionForm>
       ) : null}
       <p style={{ marginTop: 18 }}><Link href="/area/documents">Back to documents</Link></p>
     </>

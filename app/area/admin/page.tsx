@@ -1,3 +1,5 @@
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { inviteMember, setMemberStatus } from "@/lib/actions";
 import { requireAdmin } from "@/lib/auth";
 import { pool } from "@/lib/db";
@@ -20,7 +22,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <p className="help">One admin role, shared by the chair and the technical lead. Invite a member and they receive a link to set a password. Deactivating someone hides them from the public page. Their questions, comments and votes stay.</p>
       {invited ? <p className="banner">Invite sent.</p> : null}
       {error ? <p className="error">{error}</p> : null}
-      <form action={inviteMember} className="stack">
+      <ActionForm action={inviteMember} className="stack">
         <div>
           <label className="lbl" htmlFor="name">Name</label>
           <input id="name" name="name" required />
@@ -29,8 +31,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <label className="lbl" htmlFor="email">Email</label>
           <input id="email" name="email" type="email" required />
         </div>
-        <button className="btn solid" type="submit">Send invite</button>
-      </form>
+        <SubmitButton className="btn solid">Send invite</SubmitButton>
+      </ActionForm>
       <table style={{ marginTop: 28 }}>
         <thead>
           <tr><th>Name</th><th>Status</th><th></th></tr>
@@ -45,18 +47,18 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               <td>{member.status}</td>
               <td>
                 {member.status === "active" ? (
-                  <form action={setMemberStatus}>
+                  <ActionForm action={setMemberStatus}>
                     <input type="hidden" name="profile_id" value={member.id} />
                     <input type="hidden" name="status" value="deactivated" />
-                    <button className="act" type="submit">Deactivate</button>
-                  </form>
+                    <SubmitButton className="act">Deactivate</SubmitButton>
+                  </ActionForm>
                 ) : null}
                 {member.status === "deactivated" ? (
-                  <form action={setMemberStatus}>
+                  <ActionForm action={setMemberStatus}>
                     <input type="hidden" name="profile_id" value={member.id} />
                     <input type="hidden" name="status" value="active" />
-                    <button className="act" type="submit">Reactivate</button>
-                  </form>
+                    <SubmitButton className="act">Reactivate</SubmitButton>
+                  </ActionForm>
                 ) : null}
               </td>
             </tr>

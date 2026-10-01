@@ -143,7 +143,7 @@ export async function fetchDashboard(): Promise<{
                 ) ORDER BY (v.status = 'open') DESC, v.opened_at DESC)
          FROM (
            SELECT v.id, v.subject, v.status, v.deadline, v.opened_at, v.outcome,
-                  v.for_count, v.against_count, v.abstain_count, p.display_name AS author, v.kind,
+                  v.for_count, v.against_count, v.abstain_count, COALESCE(p.display_name, 'Former member') AS author, v.kind,
                   (SELECT count(*)::int FROM ballots b WHERE b.vote_id = v.id)
                     + (SELECT count(*)::int FROM poll_ballots pb WHERE pb.vote_id = v.id) AS ballots,
                   (SELECT count(*)::int FROM vote_electorate e WHERE e.vote_id = v.id) AS eligible,
@@ -156,7 +156,7 @@ export async function fetchDashboard(): Promise<{
                     WHERE o.vote_id = v.id
                   ) AS poll_summary
            FROM votes v
-           JOIN profiles p ON p.id = v.opened_by
+           LEFT JOIN profiles p ON p.id = v.opened_by
            ORDER BY (v.status = 'open') DESC, v.opened_at DESC
            LIMIT 6
          ) v

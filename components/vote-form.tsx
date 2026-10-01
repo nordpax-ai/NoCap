@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { openVote } from "@/lib/actions";
 
 const STANDARD_HELP =
@@ -31,7 +33,7 @@ export function VoteForm({ earliest }: { earliest: string }) {
   }
 
   return (
-    <form action={openVote} className="stack">
+    <ActionForm action={openVote} className="stack">
       <fieldset className="plain">
         <legend className="lbl">Vote type</legend>
         <label className="choice-line">
@@ -132,7 +134,7 @@ export function VoteForm({ earliest }: { earliest: string }) {
         <label className="lbl" htmlFor="attachments">Attachments</label>
         <input id="attachments" name="attachments" type="file" multiple />
       </div>
-      <button className="btn solid" type="submit">Open the vote</button>
-    </form>
+      <SubmitButton id="open-vote" className="btn solid">Open the vote</SubmitButton>
+    </ActionForm>
   );
 }

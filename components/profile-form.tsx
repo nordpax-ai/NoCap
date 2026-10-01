@@ -68,25 +68,28 @@ export function ProfileForm({
   };
 }) {
   const [clientError, setClientError] = useState<string | null>(null);
-  const [preparing, setPreparing] = useState(false);
   const [pending, setPending] = useState(false);
-  const busy = preparing || pending;
   const lock = useRef(false);
+
+  function stop() {
+    lock.current = false;
+    setPending(false);
+  }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || lock.current) return;
+    if (pending || lock.current) return;
     lock.current = true;
+    setPending(true);
     setClientError(null);
     const data = new FormData(event.currentTarget);
     const photo = data.get("photo");
     if (photo instanceof File && photo.size > 0) {
       if (photo.size > PREPARE_LIMIT) {
         setClientError("That photo is too large to upload. Choose an image under 40 MB.");
-        lock.current = false;
+        stop();
         return;
       }
-      setPreparing(true);
       try {
         data.set("photo", await resizeProfilePhoto(photo));
       } catch (error) {
@@ -95,21 +98,16 @@ export function ProfileForm({
             ? error.message
             : "This photo could not be read. Use a JPEG, PNG or WebP image.",
         );
-        lock.current = false;
+        stop();
         return;
-      } finally {
-        setPreparing(false);
       }
     }
-    setPending(true);
     try {
       await updateProfile(data);
     } catch (error) {
       if (isNextRedirect(error)) throw error;
       setClientError("The photo could not be saved. Use a smaller JPEG, PNG or WebP image.");
-      setPending(false);
-    } finally {
-      lock.current = false;
+      stop();
     }
   }
 
@@ -153,9 +151,15 @@ export function ProfileForm({
         <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" />
         <p className="help">JPEG, PNG or WebP. A large phone photo is reduced before it is saved.</p>
       </div>
-      <button className="btn solid" type="submit" disabled={busy} aria-busy={busy}>
-        {busy ? <span className="spinner on-dark" aria-hidden="true" /> : null}
-        {preparing ? "Preparing photo…" : pending ? "Saving…" : "Save profile"}
+      <button className="btn solid" type="submit" disabled={pending} aria-busy={pending}>
+        {pending ? (
+          <>
+            <span className="spinner on-dark" aria-hidden="true" />
+            Loading...
+          </>
+        ) : (
+          "Save profile"
+        )}
       </button>
     </form>
   );

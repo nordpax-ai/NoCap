@@ -63,6 +63,7 @@
 .mem .act, .mem .dl {
   background: none; border: 0; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
   border-bottom: 1px solid var(--rule-2); padding: 0 0 1px; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
 }
 .mem h1, .mem .title { font: 500 17px/1.35 var(--font-newsreader), Georgia, serif; letter-spacing: -0.1px; margin: 0 0 5px; }
 .mem h1.page-title { font-size: 28px; line-height: 1.2; margin: 0 0 8px; }
@@ -90,7 +91,20 @@
 .mem .ballot button {
   flex: 1; padding: 11px 0; background: #fff; border: 1px solid var(--rule-2); border-radius: var(--radius);
   font: inherit; font-size: 14px; color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 }
+.mem .delete-control { margin-top: 16px; }
+.mem .confirm-back {
+  position: fixed; inset: 0; z-index: 40; background: rgba(19, 31, 48, 0.45);
+  display: grid; place-items: center; padding: 24px;
+}
+.mem .confirm-box {
+  width: min(420px, 100%); background: #fff; border-radius: var(--radius);
+  padding: 22px; box-shadow: 0 16px 40px rgba(19, 31, 48, 0.18);
+}
+.mem .confirm-q { margin: 0; font-size: 18px; line-height: 1.4; color: var(--ink); }
+.mem .confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.mem .confirm-actions .btn { margin-top: 0; }
 .mem .ballot button[aria-pressed="true"], .mem .ballot button:hover { border-color: var(--ink); }
 .mem .ballot button[aria-pressed="true"] { background: var(--ink); color: #fff; }
 .mem .cast { font-size: 13px; color: var(--live); margin: -4px 0 14px; }
@@ -103,8 +117,10 @@
 .mem .chip.wait { border-style: dashed; color: var(--ink-3); }
 .mem .nudge, .mem .btn {
   margin-top: 12px; background: none; border: 1px solid var(--rule-2); border-radius: var(--radius);
-  padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); text-decoration: none; display: inline-flex;
+  padding: 8px 13px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink); text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
 }
+.mem button:disabled { opacity: 0.6; cursor: default; }
 .mem .btn.solid { background: var(--ink); color: #fff; border-color: var(--ink); }
 .mem .result { font-size: 14px; color: var(--ink-2); margin: 8px 0 12px; font-variant-numeric: tabular-nums; }
 .mem .foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--ink-3); }
@@ -131,8 +147,9 @@
   border: 1px solid var(--rule); background: #fff; border-radius: var(--radius); padding: 10px 12px; margin: 0 0 16px; font-size: 13px; color: var(--ink-2);
 }
 .mem .error { border-color: #c9a39a; color: #6d3b32; }
-.mem .search { display: flex; gap: 8px; margin: 0 0 18px; }
+.mem .search { display: flex; gap: 8px; margin: 0 0 18px; align-items: center; }
 .mem .search input { flex: 1; }
+.mem .search .btn { margin-top: 0; }
 .mem .comment { padding: 12px 0; border-top: 1px solid var(--rule); }
 .mem .row-check { display: flex; align-items: center; gap: 8px; }
 .mem .split { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }

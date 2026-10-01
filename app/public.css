@@ -195,6 +195,7 @@ body { min-height: 100svh; }
   border: none; cursor: pointer;
 }
 .pub .btn:hover { background: var(--ink-soft); }
+.pub button:disabled { opacity: 0.7; cursor: default; }
 .pub .note {
   background: #fff; border: 1px solid var(--line); padding: 12px 14px; margin: 0 0 22px;
   font-size: 14.5px; color: var(--slate);

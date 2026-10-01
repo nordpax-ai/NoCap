@@ -177,7 +177,7 @@ async function writeSeed(client: PoolClient, reset: boolean): Promise<void> {
       attachments, question_comments, questions,
       document_versions, documents,
       publications, applications,
-      auth_tokens, sessions, profiles, email_log
+      auth_tokens, sessions, profiles, email_log, create_guards
     RESTART IDENTITY CASCADE
   `);
 

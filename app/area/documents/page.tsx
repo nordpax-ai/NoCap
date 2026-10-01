@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { ActionForm } from "@/components/action-form";
 import { DocIcon } from "@/components/members-shell";
+import { SubmitButton } from "@/components/submit-button";
 import { uploadRegister, uploadShared } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
@@ -57,12 +59,12 @@ export default async function DocumentsPage({
       <h1 className="page-title">Documents</h1>
       <p className="help">The official register is uploaded by an admin. The shared folder is open to every member. Search is by title. Tick items to download them together.</p>
       {error ? <p className="error">{error}</p> : null}
-      <form className="search" action="/area/documents">
+      <ActionForm className="search" action="/area/documents" method="get">
         <input name="q" defaultValue={query} placeholder="Search by title" aria-label="Search by title" />
-        <button className="btn" type="submit">Search</button>
-      </form>
+        <SubmitButton className="btn">Search</SubmitButton>
+      </ActionForm>
 
-      <form action="/api/documents/bulk" method="post">
+      <ActionForm action="/api/documents/bulk" method="post">
         <div className="head"><div className="eyebrow">Official register</div></div>
         <div className="docs">
           {register.map((doc) => (
@@ -98,11 +100,11 @@ export default async function DocumentsPage({
           ))}
           {shared.length === 0 ? <p className="muted">Nothing in the shared folder matches.</p> : null}
         </div>
-        <button className="btn" type="submit">Download selected</button>
-      </form>
+        <SubmitButton className="btn">Download selected</SubmitButton>
+      </ActionForm>
 
       <div className="head" style={{ marginTop: 36 }}><div className="eyebrow">Add to the shared folder</div></div>
-      <form action={uploadShared} className="stack">
+      <ActionForm action={uploadShared} className="stack">
         <div>
           <label className="lbl" htmlFor="shared-title">Title</label>
           <input id="shared-title" name="title" required />
@@ -111,13 +113,13 @@ export default async function DocumentsPage({
           <label className="lbl" htmlFor="shared-file">File</label>
           <input id="shared-file" name="file" type="file" required />
         </div>
-        <button className="btn solid" type="submit">Upload</button>
-      </form>
+        <SubmitButton className="btn solid">Upload</SubmitButton>
+      </ActionForm>
 
       {user.role === "admin" ? (
         <>
           <div className="head" style={{ marginTop: 36 }}><div className="eyebrow">Add to the register</div></div>
-          <form action={uploadRegister} className="stack">
+          <ActionForm action={uploadRegister} className="stack">
             <div>
               <label className="lbl" htmlFor="category">Category</label>
               <select id="category" name="category" defaultValue="minutes">
@@ -137,8 +139,8 @@ export default async function DocumentsPage({
               <input id="reg-file" name="file" type="file" required />
             </div>
             <p className="help">A resolution cannot be edited or deleted after it is uploaded, including by an admin.</p>
-            <button className="btn solid" type="submit">Upload to the register</button>
-          </form>
+            <SubmitButton className="btn solid">Upload to the register</SubmitButton>
+          </ActionForm>
           {area === "shared" ? null : null}
         </>
       ) : null}

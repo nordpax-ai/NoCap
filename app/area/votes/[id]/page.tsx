@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { castVote, remindVoters } from "@/lib/actions";
+import { ActionForm } from "@/components/action-form";
+import { DeleteControl } from "@/components/delete-control";
+import { SubmitButton } from "@/components/submit-button";
+import { castVote, deleteVote, remindVoters } from "@/lib/actions";
 import { requireUser } from "@/lib/auth";
 import { pool } from "@/lib/db";
 import { labelChoice, outcomeLabel } from "@/lib/pdf";
@@ -33,6 +36,8 @@ export default async function VotePage({
     description: string;
     status: string;
     kind: "standard" | "poll";
+    opened_by: string | null;
+    opener_missing: boolean;
     allow_multiple: boolean;
     deadline: Date;
     opened_at: Date;
@@ -53,10 +58,12 @@ export default async function VotePage({
     files: { id: string; filename: string }[] | null;
   }>(
     `SELECT v.id, v.subject, v.description, v.status, v.kind, v.allow_multiple,
+            v.opened_by,
+            NOT EXISTS (SELECT 1 FROM profiles op WHERE op.id = v.opened_by) AS opener_missing,
             v.deadline, v.opened_at, v.closed_at,
             v.quorum_constitutive, v.quorum_deliberative, v.outcome,
             v.for_count, v.against_count, v.abstain_count, v.eligible_count, v.voted_count,
-            v.constitutive_met, v.deliberative_met, p.display_name AS author,
+            v.constitutive_met, v.deliberative_met, COALESCE(p.display_name, 'Former member') AS author,
             COALESCE((
               SELECT json_agg(json_build_object(
                        'profile_id', e.profile_id,
@@ -95,7 +102,7 @@ export default async function VotePage({
               WHERE a.parent_type = 'vote' AND a.parent_id = v.id
             ), '[]'::json) AS files
      FROM votes v
-     JOIN profiles p ON p.id = v.opened_by
+     LEFT JOIN profiles p ON p.id = v.opened_by
      WHERE v.id = $1`,
     [id],
   );
@@ -112,6 +119,7 @@ export default async function VotePage({
   const voted = roll.filter(answered);
   const waiting = roll.filter((person) => !answered(person));
   const open = vote.status === "open";
+  const canDelete = user.role === "admin" && open && (vote.opened_by === user.id || vote.opener_missing);
   const tie = !open && vote.constitutive_met ? leadingTie(options) : [];
 
   return (
@@ -154,16 +162,16 @@ export default async function VotePage({
         {open && mine && !answered(mine) && !poll ? (
           <div className="ballot">
             {(["for", "against", "abstain"] as const).map((choice) => (
-              <form action={castVote} key={choice}>
+              <ActionForm action={castVote} key={choice}>
                 <input type="hidden" name="vote_id" value={vote.id} />
                 <input type="hidden" name="choice" value={choice} />
-                <button type="submit">{labelChoice(choice)}</button>
-              </form>
+                <SubmitButton>{labelChoice(choice)}</SubmitButton>
+              </ActionForm>
             ))}
           </div>
         ) : null}
         {open && mine && !answered(mine) && poll ? (
-          <form action={castVote} className="poll-options">
+          <ActionForm action={castVote} className="poll-options">
             <input type="hidden" name="vote_id" value={vote.id} />
             {options.map((option) => (
               <label className="poll-option" key={option.id}>
@@ -176,8 +184,8 @@ export default async function VotePage({
                 <span>{option.label}</span>
               </label>
             ))}
-            <button className="btn solid" type="submit">Cast vote</button>
-          </form>
+            <SubmitButton className="btn solid">Cast vote</SubmitButton>
+          </ActionForm>
         ) : null}
         {mine && answered(mine) ? (
           <p className="cast">Recorded: {choiceText(mine)} · {mine.cast_at ? formatWhen(mine.cast_at) : ""}</p>
@@ -199,12 +207,12 @@ export default async function VotePage({
               ))}
             </div>
             {user.role === "admin" ? (
-              <form action={remindVoters}>
+              <ActionForm action={remindVoters}>
                 <input type="hidden" name="vote_id" value={vote.id} />
-                <button className="nudge" type="submit" disabled={waiting.length === 0}>
+                <SubmitButton className="nudge" disabled={waiting.length === 0}>
                   {waiting.length ? `Remind the ${waiting.length} outstanding` : "Everyone has voted"}
-                </button>
-              </form>
+                </SubmitButton>
+              </ActionForm>
             ) : null}
             {reminded ? <p className="by">Reminder sent.</p> : null}
           </div>
@@ -236,6 +244,15 @@ export default async function VotePage({
             <a className="dl" href={`/api/votes/${vote.id}/record`}>Download the record</a>
           </div>
         )}
+        {canDelete ? (
+          <DeleteControl
+            action={deleteVote}
+            label="Delete this vote"
+            confirm="Delete this vote? This cannot be undone."
+            hidden={{ vote_id: vote.id }}
+            buttonId="delete-vote"
+          />
+        ) : null}
       </article>
       <p style={{ marginTop: 16 }}><Link href="/area/votes">All votes</Link></p>
     </>

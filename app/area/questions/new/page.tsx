@@ -1,3 +1,5 @@
+import { ActionForm } from "@/components/action-form";
+import { SubmitButton } from "@/components/submit-button";
 import { askQuestion } from "@/lib/actions";
 
 export const metadata = { title: "Ask a question" };
@@ -9,7 +11,7 @@ export default async function NewQuestionPage({ searchParams }: { searchParams: 
       <h1 className="page-title">Ask a question</h1>
       <p className="help">Every active member is emailed when you post. A deadline is optional. Replies email the people already in the thread.</p>
       {error ? <p className="error">{error}</p> : null}
-      <form action={askQuestion} className="stack">
+      <ActionForm action={askQuestion} className="stack">
         <div>
           <label className="lbl" htmlFor="title">Title</label>
           <input id="title" name="title" required />
@@ -26,8 +28,8 @@ export default async function NewQuestionPage({ searchParams }: { searchParams: 
           <label className="lbl" htmlFor="attachments">Attachments</label>
           <input id="attachments" name="attachments" type="file" multiple />
         </div>
-        <button className="btn solid" type="submit">Post the question</button>
-      </form>
+        <SubmitButton className="btn solid">Post the question</SubmitButton>
+      </ActionForm>
     </>
   );
 }

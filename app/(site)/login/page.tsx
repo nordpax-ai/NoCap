@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { login } from "@/lib/actions";
 
@@ -13,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h1 className="pt">Sign in</h1>
         <p className="mb-ask">Members only. There is no open signup. If you have lost access, reset your password or write to the chair.</p>
         {error ? <p className="note">{error}</p> : null}
-        <form action={login}>
+        <ActionForm action={login}>
           <div className="fld">
             <label htmlFor="email">Email</label>
             <input id="email" name="email" type="email" autoComplete="username" required />
@@ -22,8 +23,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <label htmlFor="password">Password</label>
             <input id="password" name="password" type="password" autoComplete="current-password" required />
           </div>
-          <SubmitButton className="btn">Enter</SubmitButton>
-        </form>
+          <SubmitButton className="btn" dark>Enter</SubmitButton>
+        </ActionForm>
         <p className="file-note" style={{ marginTop: 18 }}>
           <Link href="/reset">Forgot your password?</Link>
         </p>

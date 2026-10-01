@@ -190,10 +190,7 @@ async function main(): Promise<void> {
     const photoInput = (await joiner.$("#photo")) as ElementHandle<HTMLInputElement> | null;
     await photoInput?.uploadFile(badPhoto);
     await clickButton(joiner, "Save profile");
-    await joiner.waitForFunction(
-      () => document.body.innerText.includes("could not be read") || document.body.innerText.includes("JPEG"),
-      { timeout: 20000 },
-    );
+    await joiner.waitForFunction(() => document.body.innerText.includes("could not be read"), { timeout: 20000 });
     check("an unreadable photo shows a clear error", (await joiner.content()).includes("could not be read"));
 
     await joiner.locator("#public_role").fill("Associate · corporate");

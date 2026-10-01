@@ -104,9 +104,10 @@ export async function updateProfile(formData: FormData) {
   if (!displayName) go("/area/profile", "Please enter your name.");
   let photoKey = user.photo_key;
   try {
-    const photo = await readUpload(formData.get("photo"), { maxBytes: 2 * 1024 * 1024, kinds: "image" });
+    const photo = await readUpload(formData.get("photo"), { maxBytes: 8 * 1024 * 1024, kinds: "image" });
     if (photo) {
-      photoKey = `photos/${user.id}-${randomUUID()}.${photo.filename.split(".").pop()}`;
+      const ext = photo.mime === "image/png" ? "png" : photo.mime === "image/webp" ? "webp" : "jpg";
+      photoKey = `photos/${user.id}-${randomUUID()}.${ext}`;
       await storagePut(photoKey, photo.buffer, photo.mime);
     }
     await pool.query(
@@ -138,7 +139,6 @@ export async function updateProfile(formData: FormData) {
   } catch (error) {
     go("/area/profile", errorMessage(error));
   }
-  revalidatePath("/members");
   revalidatePath("/area/profile");
   redirect("/area/profile?saved=1");
 }
@@ -229,7 +229,6 @@ export async function setMemberStatus(formData: FormData) {
   } catch (error) {
     go("/area/admin", errorMessage(error));
   }
-  revalidatePath("/members");
   revalidatePath("/area/admin");
   redirect("/area/admin");
 }

@@ -154,14 +154,18 @@ export async function readUpload(
     return null;
   }
   if (entry.size > options.maxBytes) {
-    throw new Error(`That file is larger than ${Math.round(options.maxBytes / (1024 * 1024))} MB.`);
+    const mb = Math.max(1, Math.round(options.maxBytes / (1024 * 1024)));
+    if (options.kinds === "image") {
+      throw new Error(`That photo is larger than ${mb} MB. Use a smaller JPEG, PNG or WebP image.`);
+    }
+    throw new Error(`That file is larger than ${mb} MB.`);
   }
   const mime = entry.type || "application/octet-stream";
   if (options.kinds === "pdf" && mime !== "application/pdf") {
     throw new Error("Please attach a PDF.");
   }
   if (options.kinds === "image" && !["image/jpeg", "image/png", "image/webp"].includes(mime)) {
-    throw new Error("Use a JPEG, PNG or WebP photo.");
+    throw new Error("Use a JPEG, PNG or WebP photo. Phone photos saved as HEIC need to be exported as JPEG first.");
   }
   const buffer = Buffer.from(await entry.arrayBuffer());
   return { buffer, filename: safeFilename(entry.name || "file"), mime, size: buffer.length };

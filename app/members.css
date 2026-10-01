@@ -18,7 +18,11 @@
 }
 .mem * { box-sizing: border-box; }
 .mem a { color: inherit; }
-.mem .wrap { max-width: 820px; margin: 0 auto; padding: 0 20px 80px; }
+.mem .wrap {
+  max-width: 820px; margin: 0 auto; padding-top: 0; padding-bottom: 80px;
+  padding-left: max(32px, env(safe-area-inset-left));
+  padding-right: max(32px, env(safe-area-inset-right));
+}
 .mem header { border-bottom: 1px solid var(--rule); margin-bottom: 28px; padding-top: env(safe-area-inset-top); }
 .mem .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 10px; }
 .mem .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -125,8 +129,14 @@
 .mem th, .mem td { text-align: left; padding: 10px 8px 10px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 .mem th { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; }
 .mem .avatar-lg { width: 72px; height: 72px; font-size: 22px; }
+@media (min-width: 900px) {
+  .mem .wrap {
+    padding-left: max(48px, env(safe-area-inset-left));
+    padding-right: max(48px, env(safe-area-inset-right));
+  }
+}
 @media (max-width: 520px) {
-  .mem .wrap { padding: 0 16px 60px; }
+  .mem .wrap { padding-bottom: 60px; }
   .mem .ballot { flex-direction: column; }
   .mem h1.page-title { font-size: 24px; }
   .mem .me span.name { display: none; }

@@ -24,10 +24,9 @@ export default async function MembersPage() {
     bio: string | null;
     city: string | null;
     jurisdiction: string | null;
-    photo_key: string | null;
   }>(
-    `SELECT id, display_name, public_role, bio, city, jurisdiction, photo_key
-     FROM profiles WHERE status = 'active' ORDER BY display_name`,
+    `SELECT id, display_name, public_role, bio, city, jurisdiction
+     FROM public_members ORDER BY sort, display_name`,
   );
   return (
     <div className="wrap inner">
@@ -43,11 +42,7 @@ export default async function MembersPage() {
               className="mem-photo"
               style={{ background: GRADIENTS[member.display_name] || "linear-gradient(140deg,#B9C6E4,#E8E2E2 60%,#F0A88E)" }}
             >
-              {member.photo_key ? (
-                <img src={`/api/photos/${member.id}`} alt="" />
-              ) : (
-                <span className="mem-initials">{initials(member.display_name)}</span>
-              )}
+              <span className="mem-initials">{initials(member.display_name)}</span>
             </div>
             <div className="mem-body">
               <h3>{member.display_name}</h3>

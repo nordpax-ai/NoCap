@@ -52,13 +52,13 @@ Logged messages are listed at http://localhost:3000/dev/mail while `EMAIL_PROVID
 - An open question, a closed vote that carried, a closed vote that is invalid because the constitutive quorum was not met, and an open admission vote.
 - Dates are stored in UTC and shown in `APP_TIMEZONE` (default `Europe/Rome`).
 
-`npm run verify` repeats the main flows against a running dev server: invite, set password, public profile, application, question email, frozen electorate, automatic close, both quorums (including the invalid case and abstentions in the deliberative count), database immutability, the PDF record, bulk download and the full export. It changes the database. Run `npm run db:seed` again afterwards to restore the demo.
+`npm run verify` repeats the main flows against a running dev server: invite, set password, a profile edit that stays off the public members page, application, question email, frozen electorate, automatic close, both quorums (including the invalid case and abstentions in the deliberative count), database immutability, the PDF record, bulk download and the full export. It changes the database. Run `npm run db:seed` again afterwards to restore the demo.
 
 ## Reserved area
 
 Sign-in is at `/login`. There is no open signup.
 
-- **Profile.** Photo, firm, city, practice area, contacts, and the role, biography and jurisdiction shown on the public members page. Firm is not published.
+- **Profile.** Photo, role, biography, firm, city, practice area and contacts. Saving a profile does not change the public members page. That page reads `public_members`, which the migration fills with the original example people and their placeholder portraits (initials on a gradient, no photo file).
 - **Documents.** Official register (admin uploads) and shared folder (any member uploads). Versions, title search, download, and a zip of the ticked files.
 - **Questions.** Any member opens one. Replies are comments, with attachments and an optional deadline. The list shows Open or Closed beside the question, and the deadline when one is set. Opening notifies the other members (bell and email). A reply notifies the member who opened the question, unless they wrote the reply. The author can still send a manual reminder by email.
 - **Votes.** An admin opens a vote with a subject, a description, attachments, a deadline, and two quorums. The deadline has to be more than 48 hours away, so both automatic reminders can go out. Eligible voters are the active members at that moment, and the list does not change. Choices are For, Against and Abstain. The vote is open: everyone can see who voted what. A ballot cannot be edited. While the vote is open the page shows who has voted, who has not, and the deadline. The dashboard shows the count and the closing date. The admin can remind people who have not voted.

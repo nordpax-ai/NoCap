@@ -3,12 +3,12 @@
  * Run with the dev server on http://localhost:3000 and a fresh seed.
  */
 import { inflateRawSync, inflateSync } from "zlib";
-import { mkdir, readdir, readFile } from "fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { DateTime } from "luxon";
 import JSZip from "jszip";
 import { Pool } from "pg";
-import puppeteer, { type Browser, type Page } from "puppeteer-core";
+import puppeteer, { type Browser, type ElementHandle, type Page } from "puppeteer-core";
 import { loadEnv } from "./load-env";
 
 loadEnv();
@@ -160,6 +160,12 @@ async function main(): Promise<void> {
     const started = Date.now();
     const admin = await freshPage(browser);
     await login(admin, "paolo.piccirilli@example.invalid", "example-password");
+    await goto(admin, `${BASE}/area/profile`);
+    const paoloProfile = await admin.content();
+    check(
+      "Paolo's demo photo is the initials placeholder",
+      paoloProfile.includes(">PP<") && !paoloProfile.includes("/api/photos/"),
+    );
 
     await goto(admin, `${BASE}/area/admin`);
     await admin.locator("#name").fill("Verify Example");
@@ -178,19 +184,45 @@ async function main(): Promise<void> {
     check("invite link sets a password and opens the dashboard", joiner.url().includes("/area"));
 
     await goto(joiner, `${BASE}/area/profile`);
+    const badPhoto = path.join(SHOTS, "not-a-photo.txt");
+    await mkdir(SHOTS, { recursive: true });
+    await writeFile(badPhoto, "this is not an image");
+    const photoInput = (await joiner.$("#photo")) as ElementHandle<HTMLInputElement> | null;
+    await photoInput?.uploadFile(badPhoto);
+    await clickButton(joiner, "Save profile");
+    await joiner.waitForFunction(
+      () => document.body.innerText.includes("could not be read") || document.body.innerText.includes("JPEG"),
+      { timeout: 20000 },
+    );
+    check("an unreadable photo shows a clear error", (await joiner.content()).includes("could not be read"));
+
     await joiner.locator("#public_role").fill("Associate · corporate");
     await joiner.locator("#bio").fill("Example verification biography. Not a real person.");
     await joiner.locator("#city").fill("Lyon");
     await joiner.locator("#jurisdiction").fill("France");
     await joiner.locator("#firm").fill("Example Firm");
+    await joiner.$("#photo").then((input) => input?.evaluate((node) => {
+      (node as HTMLInputElement).value = "";
+    }));
     await clickButton(joiner, "Save profile");
     await joiner.waitForFunction(() => location.search.includes("saved"), { timeout: 20000 });
 
     const members = await freshPage(browser);
     await goto(members, `${BASE}/members`);
     const afterProfile = await members.content();
-    check("public members page shows the new profile", afterProfile.includes("Verify Example") && afterProfile.includes("Lyon") && afterProfile.includes("France"));
-    check("public members page omits the firm", !afterProfile.includes("Example Firm"));
+    check(
+      "public members stay the original placeholders",
+      afterProfile.includes("Elena Rossi") &&
+        afterProfile.includes("Paolo Piccirilli") &&
+        afterProfile.includes("Milan") &&
+        afterProfile.includes("Private equity and carve-outs") &&
+        !afterProfile.includes("Verify Example") &&
+        !afterProfile.includes("Lyon") &&
+        !afterProfile.includes("Example verification biography"),
+    );
+    check("public members page omits the private firm", !afterProfile.includes("Example Firm"));
+    const savedHtml = await joiner.content();
+    check("profile save confirms success", savedHtml.includes("Profile saved."));
     await members.close();
 
     const membership = await freshPage(browser);

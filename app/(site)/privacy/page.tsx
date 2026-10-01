@@ -24,7 +24,7 @@ export default function PrivacyPage() {
         </p>
         <h2>Members&apos; area</h2>
         <p>
-          Members have an account created by invitation. The profile a member edits — photo, role, short biography, city and jurisdiction — is shown on the public members page while the membership is active. Firm, practice area and contact details stay inside the reserved area. Questions, comments and votes remain on the record if a member leaves. A vote shows the member&apos;s name and choice to the other members.
+          Members have an account created by invitation. A profile edited in the reserved area stays there. The public members page shows a separate set of example profiles and does not change when a member saves their account. Questions, comments and votes remain on the record if a member leaves. A vote shows the member&apos;s name and choice to the other members.
         </p>
         <h2>Hosting</h2>
         <p>

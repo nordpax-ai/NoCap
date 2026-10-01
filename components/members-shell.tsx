@@ -47,7 +47,7 @@ export function MembersShell({
               <NotificationBell unread={unread} items={notifications} />
               <Link href="/area/profile" className="avatar" aria-label="Your profile">
                 {user.photo_key ? (
-                  <img src={`/api/photos/${user.id}`} alt="" />
+                  <img src={`/api/photos/${user.id}?v=${encodeURIComponent(user.photo_key)}`} alt="" />
                 ) : (
                   initials(user.display_name)
                 )}

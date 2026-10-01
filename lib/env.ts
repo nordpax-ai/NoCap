@@ -1,11 +1,11 @@
-import { resolveDatabaseUrl, resolveOwnerDatabaseUrl } from "./database-url";
+import { resolveOwnerDatabaseUrl, resolveRuntimeDatabaseUrl } from "./database-url";
 
 export type StorageDriver = "local" | "s3" | "netlify-blobs";
 
 export const env = {
-  // DATABASE_URL is the Supabase session pooler URI on Netlify, or local Postgres.
-  // Non-Postgres values are ignored. DATABASE_URL_OWNER is only for db:deploy.
-  databaseUrl: () => resolveDatabaseUrl().url,
+  // The running app prefers DATABASE_URL_POOL (transaction pooler, port 6543)
+  // and otherwise DATABASE_URL. db:deploy never reads DATABASE_URL_POOL.
+  databaseUrl: () => resolveRuntimeDatabaseUrl().url,
   ownerDatabaseUrl: () => resolveOwnerDatabaseUrl().url,
   appUrl: () =>
     (process.env.APP_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || "http://localhost:3000").replace(
@@ -24,8 +24,6 @@ export const env = {
     if (process.env.NETLIFY === "true") return "netlify-blobs";
     return "local";
   },
-  demoMode: () =>
-    process.env.DEMO_MODE === "1" || process.env.DEMO_MODE === "true" || process.env.NETLIFY === "true",
   storageDir: () => process.env.STORAGE_LOCAL_DIR || "./var/storage",
   cronSecret: () => process.env.CRON_SECRET || "change-me",
   sessionDays: () => Number(process.env.SESSION_DAYS || "30"),

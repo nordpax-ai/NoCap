@@ -85,17 +85,19 @@ In the Supabase project (region Frankfurt), open **Project Settings → Database
 postgresql://postgres.<project-ref>:<password>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
 ```
 
-Use port **5432** (session mode). Port 6543 is transaction mode. Session mode is required because migrations and the app use transactions, `set_config`, and an advisory lock. The user is `postgres.<project-ref>`.
+Use port **5432** (session mode) for `DATABASE_URL`. Migrations take a session-level advisory lock, which transaction mode cannot hold, so `db:deploy` must stay on 5432. The user is `postgres.<project-ref>`.
 
 That URI is `DATABASE_URL`. The app and `db:deploy` read `DATABASE_URL` only when it starts with `postgres://` or `postgresql://`. The site's existing `DATABASE_URL=file:./preview.db` is ignored, so replace it with the pooler URI. Set the variable for **Builds** and **Functions** (all scopes). The build runs `db:deploy` before the site starts, so a runtime-only value is not enough.
 
-`db:deploy` uses `DATABASE_URL_OWNER` when that value is also a Postgres URL, and otherwise the same `DATABASE_URL`. Leave `DATABASE_URL_OWNER` unset on Netlify.
+For the running site, also set `DATABASE_URL_POOL` to the same URI with port **6543** (transaction mode), scoped to **Functions**. The app uses it when it is a Postgres URL and ignores it otherwise. `db:deploy` never reads it. Transaction mode shares backends, so a warm function does not pin a session-pooler client between queries. Parameterized queries from `pg` use unnamed prepared statements, which that mode accepts. Named prepared statements are not used.
+
+`db:deploy` uses `DATABASE_URL_OWNER` when that value is also a Postgres URL, and otherwise the same `DATABASE_URL`. Leave `DATABASE_URL_OWNER` unset on Netlify, and do not point `DATABASE_URL` at port 6543.
 
 `NETLIFY_DATABASE_URL` and `NETLIFY_DB_URL` are not read. A leftover value there could still point at a US database, and it would have been selected while `DATABASE_URL` was the SQLite preview string.
 
 Connections to `*.supabase.com` and `*.supabase.co` use TLS. Supabase's pooler certificate does not pass Node's default verification, and `pg` 8 treats `sslmode=require` as verification. The pool config rewrites that to `sslmode=no-verify`, which still requires TLS and sets `rejectUnauthorized: false`. `sslmode=verify-full` and `sslmode=verify-ca` are left as written. Local Postgres URLs are left without SSL.
 
-On Netlify the pool size is 1, with a 10 second idle timeout, so a function does not hold a session-pooler connection. Locally the pool size is 10. `db:deploy` always uses one connection.
+On Netlify the session-mode pool size is 1. With `DATABASE_URL_POOL` on port 6543 the runtime pool size is 3. Idle sockets are kept (20 seconds in session mode, 60 seconds in transaction mode) and reused by the next invocation on that function instance, with TCP keepalive. An idle client that the pooler drops is logged and discarded instead of crashing the process. A transient connection error is retried once. Locally the pool size is 10. `db:deploy` always uses one connection.
 
 Migrations in `db/migrations` do not enable extensions. `gen_random_uuid()` is built into Postgres 13 and later, which Supabase provides. Grants and RLS policies for `nocap_app` run only when that role exists. Supabase's `postgres` login owns the tables and bypasses RLS. Closed votes, ballots and resolutions stay immutable because the triggers reject the change for every role, including the table owner.
 
@@ -105,17 +107,17 @@ Set these in the Netlify UI (**Site configuration → Environment variables**) f
 
 | Variable | Value |
 | --- | --- |
-| `DATABASE_URL` | Supabase session pooler URI (`postgres://` or `postgresql://`, host `aws-0-eu-central-1.pooler.supabase.com`, port `5432`, user `postgres.<project-ref>`). Replace `file:./preview.db`. |
+| `DATABASE_URL` | Supabase session pooler URI (`postgres://` or `postgresql://`, host `aws-0-eu-central-1.pooler.supabase.com`, port `5432`, user `postgres.<project-ref>`). Replace `file:./preview.db`. Required for Builds and as the fallback. |
+| `DATABASE_URL_POOL` | Same user, host and database, port `6543`. Set it for Functions. Optional: if it is unset, the site keeps using `DATABASE_URL`. |
 | `STORAGE_DRIVER` | `netlify-blobs` |
 | `EMAIL_PROVIDER` | `log` |
-| `DEMO_MODE` | `1` |
 | `APP_TIMEZONE` | `Europe/Rome` |
 | `CRON_SECRET` | A long random string. Optional. The scheduled closer calls Postgres directly and does not need it. `POST /api/jobs/close-votes` still expects `Authorization: Bearer` this value, or `change-me` if it is unset. |
 | `FOUNDING_COMMITTEE_EMAIL` | `founding-committee@nocap-law.com` (placeholder) |
 | `CONTACT_EMAIL` | `contact@nocap-law.com` (placeholder) |
 | `EMAIL_FROM` | `nocap <noreply@nocap-law.com>` |
 
-Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`. Leave `DATABASE_URL_OWNER` unset.
+Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`. Leave `DATABASE_URL_OWNER` unset. `DEMO_MODE` is no longer read; leaving it set does nothing.
 
 ### What a deploy does
 
@@ -132,7 +134,7 @@ Demo sign-in after seeding:
 | Admin | `paolo.piccirilli@example.invalid` | `example-password` |
 | Member | `elena.rossi@example.invalid` | `example-password` |
 
-Votes close in two ways. A scheduled function, `netlify/functions/close-votes.ts`, runs every 10 minutes. It sends the 48-hour and 24-hour reminders for open votes, then closes anything already due and notifies members of the outcome. Opening the reserved area, or downloading a vote record, runs the same job. Each reminder is stored once per member, so a repeat run does not send it again. The reserved area shows a small **Demo · example data** marker.
+Votes close in two ways. A scheduled function, `netlify/functions/close-votes.ts`, runs every 10 minutes. It sends the 48-hour and 24-hour reminders for open votes, then closes anything already due and notifies members of the outcome. Opening the reserved area runs that job only when a vote is already inside its last 48 hours, and a failure there is logged without taking the page down. Downloading a vote record runs the same job. Each reminder is stored once per member, so a repeat run does not send it again.
 
 Logged mail is not sent. The admin reads it at `/area/admin/outbox`. Files are stored in Netlify Blobs.
 

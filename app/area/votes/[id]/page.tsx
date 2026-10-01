@@ -35,31 +35,37 @@ export default async function VotePage({
     constitutive_met: boolean | null;
     deliberative_met: boolean | null;
     author: string;
+    roll: { profile_id: string; display_name: string; choice: string | null; cast_at: string | null }[] | null;
+    files: { id: string; filename: string }[] | null;
   }>(
-    `SELECT v.*, p.display_name AS author
-     FROM votes v JOIN profiles p ON p.id = v.opened_by WHERE v.id = $1`,
+    `SELECT v.id, v.subject, v.description, v.status, v.deadline, v.opened_at, v.closed_at,
+            v.quorum_constitutive, v.quorum_deliberative, v.outcome,
+            v.for_count, v.against_count, v.abstain_count, v.eligible_count, v.voted_count,
+            v.constitutive_met, v.deliberative_met, p.display_name AS author,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'profile_id', e.profile_id, 'display_name', ep.display_name,
+                       'choice', b.choice, 'cast_at', b.cast_at
+                     ) ORDER BY (b.choice IS NULL), ep.display_name)
+              FROM vote_electorate e
+              JOIN profiles ep ON ep.id = e.profile_id
+              LEFT JOIN ballots b ON b.vote_id = e.vote_id AND b.voter_id = e.profile_id
+              WHERE e.vote_id = v.id
+            ), '[]'::json) AS roll,
+            COALESCE((
+              SELECT json_agg(json_build_object('id', a.id, 'filename', a.filename) ORDER BY a.filename)
+              FROM attachments a
+              WHERE a.parent_type = 'vote' AND a.parent_id = v.id
+            ), '[]'::json) AS files
+     FROM votes v
+     JOIN profiles p ON p.id = v.opened_by
+     WHERE v.id = $1`,
     [id],
   );
   const vote = rows[0];
   if (!vote) notFound();
-  const { rows: roll } = await pool.query<{
-    profile_id: string;
-    display_name: string;
-    choice: string | null;
-    cast_at: Date | null;
-  }>(
-    `SELECT e.profile_id, p.display_name, b.choice, b.cast_at
-     FROM vote_electorate e
-     JOIN profiles p ON p.id = e.profile_id
-     LEFT JOIN ballots b ON b.vote_id = e.vote_id AND b.voter_id = e.profile_id
-     WHERE e.vote_id = $1
-     ORDER BY (b.choice IS NULL), p.display_name`,
-    [id],
-  );
-  const { rows: files } = await pool.query<{ id: string; filename: string }>(
-    `SELECT id, filename FROM attachments WHERE parent_type = 'vote' AND parent_id = $1`,
-    [id],
-  );
+  const roll = vote.roll ?? [];
+  const files = vote.files ?? [];
   const mine = roll.find((person) => person.profile_id === user.id);
   const voted = roll.filter((person) => person.choice);
   const waiting = roll.filter((person) => !person.choice);

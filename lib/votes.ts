@@ -1,4 +1,5 @@
 import { pool } from "./db";
+import { logServerError } from "./log";
 import { notifyMany } from "./notify";
 import { failureReason, outcomeLabel, buildVoteRecordPdf, type VoteRecord } from "./pdf";
 import { storageExists, storageGet, storagePut } from "./storage";
@@ -6,7 +7,17 @@ import { formatWhen } from "./time";
 
 const HOUR = 60 * 60 * 1000;
 
-export async function runVoteMaintenance(): Promise<void> {
+let maintenanceInflight: Promise<void> | null = null;
+
+export function runVoteMaintenance(): Promise<void> {
+  if (maintenanceInflight) return maintenanceInflight;
+  maintenanceInflight = runVoteMaintenanceOnce().finally(() => {
+    maintenanceInflight = null;
+  });
+  return maintenanceInflight;
+}
+
+async function runVoteMaintenanceOnce(): Promise<void> {
   await sendDueReminders();
   const { rows } = await pool.query<{ id: string }>(
     `SELECT id FROM votes WHERE status = 'open' AND deadline <= now()`,

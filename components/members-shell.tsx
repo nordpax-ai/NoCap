@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { logout } from "@/lib/actions";
 import { initials, type Member } from "@/lib/auth";
-import { env } from "@/lib/env";
 import { NotificationBell, type BellItem } from "./notification-bell";
 
 const LINKS = [
@@ -40,7 +39,6 @@ export function MembersShell({
               <Link href="/area" aria-label="nocap members' area">
                 <img className="mark-img" src="/brand/mark-navy.png" alt="nocap" />
               </Link>
-              {env.demoMode() ? <span className="demo-flag">Demo · example data</span> : null}
             </div>
             <div className="me">
               <Link href="/area/profile">

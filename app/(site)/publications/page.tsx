@@ -11,11 +11,10 @@ export default async function PublicationsPage() {
     category: string;
     summary: string;
     published_on: Date;
-    is_example: boolean;
     display_name: string | null;
     city: string | null;
   }>(
-    `SELECT pub.slug, pub.title, pub.category, pub.summary, pub.published_on, pub.is_example,
+    `SELECT pub.slug, pub.title, pub.category, pub.summary, pub.published_on,
             p.display_name, p.city
      FROM publications pub
      LEFT JOIN profiles p ON p.id = pub.author_id
@@ -28,11 +27,6 @@ export default async function PublicationsPage() {
       <p className="lede">
         Articles, interviews and cross-border reads on deal features, structuring quirks, legislative developments and market trends - each one under the name of the member behind it.
       </p>
-      {rows.some((row) => row.is_example) ? (
-        <p className="note" style={{ marginTop: 28 }}>
-          Example pieces from the design mockup. Not real publications.
-        </p>
-      ) : null}
       <div className="pubs-grid">
         {rows.map((row) => (
           <Link className="pub-card" href={`/publications/${row.slug}`} key={row.slug}>

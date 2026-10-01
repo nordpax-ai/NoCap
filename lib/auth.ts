@@ -2,8 +2,11 @@ import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
+import { fetchAreaFrame, type AreaFrameRow, type AreaNote } from "./area-data";
 import { pool } from "./db";
 import { env } from "./env";
+import { formatShort } from "./time";
 
 export type Member = {
   id: string;
@@ -46,20 +49,55 @@ export function passwordProblem(password: string): string | null {
   return null;
 }
 
-export async function getCurrentUser(): Promise<Member | null> {
+export type AreaFrame = {
+  user: Member;
+  notifications: { id: string; title: string; href: string; when: string }[];
+  unread: number;
+  needsMaintenance: boolean;
+};
+
+function memberFromRow(row: AreaFrameRow): Member {
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    display_name: row.display_name,
+    firm: row.firm,
+    city: row.city,
+    practice_area: row.practice_area,
+    contacts: row.contacts,
+    public_role: row.public_role,
+    bio: row.bio,
+    jurisdiction: row.jurisdiction,
+    photo_key: row.photo_key,
+    is_example: row.is_example,
+  };
+}
+
+export const loadAreaFrame = cache(async (): Promise<AreaFrame | null> => {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
-  const { rows } = await pool.query<Member>(
-    `SELECT p.id, p.email, p.role, p.status, p.display_name, p.firm, p.city,
-            p.practice_area, p.contacts, p.public_role, p.bio, p.jurisdiction,
-            p.photo_key, p.is_example
-     FROM sessions s
-     JOIN profiles p ON p.id = s.profile_id
-     WHERE s.token_hash = $1 AND s.expires_at > now() AND p.status = 'active'`,
-    [tokenHash(token)],
-  );
-  return rows[0] ?? null;
+  const row = await fetchAreaFrame(tokenHash(token));
+  if (!row) return null;
+  const notes: AreaNote[] = row.notes ?? [];
+  return {
+    user: memberFromRow(row),
+    notifications: notes.map((note) => ({
+      id: note.id,
+      title: note.title,
+      href: note.href,
+      when: formatShort(note.created_at),
+    })),
+    unread: notes.filter((note) => !note.read_at).length,
+    needsMaintenance: row.needs_maintenance,
+  };
+});
+
+export async function getCurrentUser(): Promise<Member | null> {
+  const frame = await loadAreaFrame();
+  return frame?.user ?? null;
 }
 
 export async function requireUser(): Promise<Member> {

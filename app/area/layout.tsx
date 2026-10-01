@@ -1,43 +1,35 @@
 import { headers } from "next/headers";
 import { MembersShell } from "@/components/members-shell";
-import { requireUser } from "@/lib/auth";
-import { pool } from "@/lib/db";
-import { formatShort } from "@/lib/time";
-import { closeDueVotes } from "@/lib/votes";
+import { loadAreaFrame } from "@/lib/auth";
+import { isNextControlFlow, logServerError } from "@/lib/log";
+import { runVoteMaintenance } from "@/lib/votes";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Members' area" };
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
-  const user = await requireUser();
-  await closeDueVotes();
-  const pathname = (await headers()).get("x-pathname") || "/area";
-  const { rows } = await pool.query<{
-    id: string;
-    title: string;
-    href: string;
-    created_at: Date;
-    read_at: Date | null;
-  }>(
-    `SELECT id, title, href, created_at, read_at
-     FROM notifications
-     WHERE recipient_id = $1
-     ORDER BY created_at DESC
-     LIMIT 30`,
-    [user.id],
-  );
-  return (
-    <MembersShell
-      user={user}
-      pathname={pathname}
-      unread={rows.filter((row) => !row.read_at).length}
-      notifications={rows.map((row) => ({
-        id: row.id,
-        title: row.title,
-        href: row.href,
-        when: formatShort(row.created_at),
-      }))}
-    >
-      {children}
-    </MembersShell>
-  );
+  try {
+    const frame = await loadAreaFrame();
+    if (!frame) redirect("/login");
+    if (frame.needsMaintenance) {
+      await runVoteMaintenance().catch((error) => {
+        logServerError("vote-maintenance", error);
+      });
+    }
+    const pathname = (await headers()).get("x-pathname") || "/area";
+    return (
+      <MembersShell
+        user={frame.user}
+        pathname={pathname}
+        unread={frame.unread}
+        notifications={frame.notifications}
+      >
+        {children}
+      </MembersShell>
+    );
+  } catch (error) {
+    if (isNextControlFlow(error)) throw error;
+    logServerError("area-layout", error);
+    throw error;
+  }
 }

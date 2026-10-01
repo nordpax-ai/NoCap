@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@/components/submit-button";
 import { login } from "@/lib/actions";
 
 export const metadata = { title: "Private area" };
@@ -21,7 +22,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <label htmlFor="password">Password</label>
             <input id="password" name="password" type="password" autoComplete="current-password" required />
           </div>
-          <button className="btn" type="submit">Enter</button>
+          <SubmitButton className="btn">Enter</SubmitButton>
         </form>
         <p className="file-note" style={{ marginTop: 18 }}>
           <Link href="/reset">Forgot your password?</Link>

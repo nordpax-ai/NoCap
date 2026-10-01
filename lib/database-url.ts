@@ -1,6 +1,6 @@
 import type { PoolConfig } from "pg";
 
-export type DatabaseUrlSource = "DATABASE_URL" | "DATABASE_URL_OWNER";
+export type DatabaseUrlSource = "DATABASE_URL" | "DATABASE_URL_OWNER" | "DATABASE_URL_POOL";
 
 export type ResolvedDatabaseUrl = {
   url: string;
@@ -29,6 +29,14 @@ export function resolveOwnerDatabaseUrl(): ResolvedDatabaseUrl {
   return resolveDatabaseUrl();
 }
 
+// Runtime only. db:deploy keeps using resolveOwnerDatabaseUrl() so advisory locks
+// stay on a session connection (port 5432) even when the app uses port 6543.
+export function resolveRuntimeDatabaseUrl(): ResolvedDatabaseUrl {
+  const pooled = postgresUrl(process.env.DATABASE_URL_POOL);
+  if (pooled) return { url: pooled, source: "DATABASE_URL_POOL" };
+  return resolveDatabaseUrl();
+}
+
 export function databaseTarget(url: string): string {
   try {
     const parsed = new URL(url);
@@ -39,15 +47,32 @@ export function databaseTarget(url: string): string {
   }
 }
 
-function connectionHost(connectionString: string): string {
+function hostAndPort(connectionString: string): { host: string; port: string | undefined } {
   const rest = connectionString.replace(/^postgres(?:ql)?:\/\//i, "");
   const at = rest.lastIndexOf("@");
   const hostport = (at === -1 ? rest : rest.slice(at + 1)).split("/")[0].split("?")[0];
   if (hostport.startsWith("[")) {
     const end = hostport.indexOf("]");
-    return end === -1 ? hostport : hostport.slice(1, end);
+    const host = end === -1 ? hostport : hostport.slice(1, end);
+    const after = end === -1 ? "" : hostport.slice(end + 1);
+    return { host, port: after.startsWith(":") ? after.slice(1) : undefined };
   }
-  return hostport.replace(/:\d+$/, "");
+  const colon = hostport.lastIndexOf(":");
+  if (colon === -1) return { host: hostport, port: undefined };
+  return { host: hostport.slice(0, colon), port: hostport.slice(colon + 1) };
+}
+
+function connectionHost(connectionString: string): string {
+  return hostAndPort(connectionString).host;
+}
+
+export function isTransactionPooler(connectionString: string): boolean {
+  const { port } = hostAndPort(connectionString);
+  if (port === "6543") return true;
+  const query = connectionString.split("?")[1];
+  if (!query) return false;
+  const params = new URLSearchParams(query);
+  return params.get("pool_mode") === "transaction" || params.get("pgbouncer") === "true";
 }
 
 function sslMode(connectionString: string): string | undefined {
@@ -72,12 +97,17 @@ export function pgPoolConfig(connectionString: string, max: number): PoolConfig 
   const host = connectionHost(connectionString);
   const mode = sslMode(connectionString);
   const supabase = isSupabaseHost(host);
+  const transaction = isTransactionPooler(connectionString);
   const config: PoolConfig = {
     connectionString,
     max,
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 15_000,
+    // Keep the socket across warm invocations, then release it. Transaction
+    // mode does not hold a Postgres backend while idle, so it can wait longer.
+    idleTimeoutMillis: transaction ? 60_000 : 20_000,
+    connectionTimeoutMillis: 10_000,
     allowExitOnIdle: true,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   };
 
   // Supabase's pooler requires TLS. pg 8 treats sslmode=require as certificate
@@ -89,6 +119,11 @@ export function pgPoolConfig(connectionString: string, max: number): PoolConfig 
   return config;
 }
 
-export function runtimePoolMax(): number {
-  return process.env.NETLIFY === "true" ? 1 : 10;
+export function runtimePoolMax(connectionString?: string): number {
+  if (process.env.NETLIFY !== "true") return 10;
+  // Session mode (5432) pins one backend per client. Stay at 1 so a warm
+  // function cannot exhaust Supabase's session-pooler client limit.
+  // Transaction mode (6543) shares backends, so a few parallel queries are safe.
+  if (connectionString && isTransactionPooler(connectionString)) return 3;
+  return 1;
 }

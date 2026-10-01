@@ -18,11 +18,10 @@ export default async function PublicationPage({ params }: { params: Promise<{ sl
     body: string;
     published_on: Date;
     pdf_key: string | null;
-    is_example: boolean;
     display_name: string | null;
     city: string | null;
   }>(
-    `SELECT pub.title, pub.category, pub.summary, pub.body, pub.published_on, pub.pdf_key, pub.is_example,
+    `SELECT pub.title, pub.category, pub.summary, pub.body, pub.published_on, pub.pdf_key,
             p.display_name, p.city
      FROM publications pub LEFT JOIN profiles p ON p.id = pub.author_id
      WHERE pub.slug = $1`,
@@ -39,11 +38,6 @@ export default async function PublicationPage({ params }: { params: Promise<{ sl
           <b>{publication.display_name || "A member"}</b>
           {publication.city ? ` · ${publication.city}` : ""} · {formatWhen(publication.published_on, false)}
         </p>
-        {publication.is_example ? (
-          <p className="note" style={{ marginTop: 28 }}>
-            Example text from the design mockup. The detail format — this page, and an optional PDF — is a placeholder and still an open decision.
-          </p>
-        ) : null}
         <div className="body" style={{ marginTop: 28 }}>{publication.body}</div>
         {publication.pdf_key ? (
           <p style={{ marginTop: 28 }}>

@@ -19,35 +19,43 @@ export default async function QuestionPage({
     id: string;
     title: string;
     body: string;
-    deadline: Date | null;
-    created_at: Date;
+    deadline: string | null;
+    created_at: string;
     author_id: string;
     author: string;
+    comments: { id: string; body: string; created_at: string; author: string; author_id: string }[] | null;
+    files: { id: string; filename: string; parent_id: string; parent_type: string }[] | null;
   }>(
-    `SELECT q.id, q.title, q.body, q.deadline, q.created_at, q.author_id, p.display_name AS author
-     FROM questions q JOIN profiles p ON p.id = q.author_id WHERE q.id = $1`,
+    `SELECT q.id, q.title, q.body, q.deadline, q.created_at, q.author_id, p.display_name AS author,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'id', c.id, 'body', c.body, 'created_at', c.created_at,
+                       'author_id', c.author_id, 'author', cp.display_name
+                     ) ORDER BY c.created_at)
+              FROM question_comments c
+              JOIN profiles cp ON cp.id = c.author_id
+              WHERE c.question_id = q.id
+            ), '[]'::json) AS comments,
+            COALESCE((
+              SELECT json_agg(json_build_object(
+                       'id', a.id, 'filename', a.filename,
+                       'parent_id', a.parent_id, 'parent_type', a.parent_type
+                     ))
+              FROM attachments a
+              WHERE (a.parent_type = 'question' AND a.parent_id = q.id)
+                 OR (a.parent_type = 'comment' AND a.parent_id IN (
+                      SELECT id FROM question_comments WHERE question_id = q.id
+                    ))
+            ), '[]'::json) AS files
+     FROM questions q
+     JOIN profiles p ON p.id = q.author_id
+     WHERE q.id = $1`,
     [id],
   );
   const question = rows[0];
   if (!question) notFound();
-  const { rows: comments } = await pool.query<{
-    id: string;
-    body: string;
-    created_at: Date;
-    author: string;
-    author_id: string;
-  }>(
-    `SELECT c.id, c.body, c.created_at, c.author_id, p.display_name AS author
-     FROM question_comments c JOIN profiles p ON p.id = c.author_id
-     WHERE c.question_id = $1 ORDER BY c.created_at`,
-    [id],
-  );
-  const { rows: files } = await pool.query<{ id: string; filename: string; parent_id: string; parent_type: string }>(
-    `SELECT id, filename, parent_id, parent_type FROM attachments
-     WHERE (parent_type = 'question' AND parent_id = $1)
-        OR (parent_type = 'comment' AND parent_id = ANY($2::uuid[]))`,
-    [id, comments.map((comment) => comment.id)],
-  );
+  const comments = question.comments ?? [];
+  const files = question.files ?? [];
   const status = questionStatus(question.deadline);
   return (
     <>

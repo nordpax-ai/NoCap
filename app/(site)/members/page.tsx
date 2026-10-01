@@ -25,12 +25,10 @@ export default async function MembersPage() {
     city: string | null;
     jurisdiction: string | null;
     photo_key: string | null;
-    is_example: boolean;
   }>(
-    `SELECT id, display_name, public_role, bio, city, jurisdiction, photo_key, is_example
+    `SELECT id, display_name, public_role, bio, city, jurisdiction, photo_key
      FROM profiles WHERE status = 'active' ORDER BY display_name`,
   );
-  const examples = rows.some((row) => row.is_example);
   return (
     <div className="wrap inner">
       <div className="eyebrow">Members</div>
@@ -38,11 +36,6 @@ export default async function MembersPage() {
       <p className="lede">
         Twelve lawyers across eight European jurisdictions, working on M&amp;A, private equity, venture capital and corporate transactions - with their story, their practice, their market and the firm they sit in.
       </p>
-      {examples ? (
-        <p className="note" style={{ marginTop: 28 }}>
-          Example profiles from the design mockup. These are placeholders, not the real membership.
-        </p>
-      ) : null}
       <div className="mem-grid">
         {rows.map((member) => (
           <article className="mem" key={member.id}>

@@ -16,30 +16,41 @@ export default async function DocumentsPage({
   const { q = "", error, area } = await searchParams;
   const query = q.trim();
   const { rows } = await pool.query<{
-    id: string;
-    area: string;
-    category: string;
-    title: string;
-    immutable: boolean;
-    version_number: number;
-    uploaded_at: Date;
+    documents: {
+      id: string;
+      area: string;
+      category: string;
+      title: string;
+      immutable: boolean;
+      version_number: number;
+      uploaded_at: string;
+    }[] | null;
+    closed: { id: string; subject: string; closed_at: string; outcome: string }[] | null;
   }>(
-    `SELECT d.id, d.area, d.category, d.title, d.immutable, v.version_number, v.uploaded_at
-     FROM documents d
-     JOIN document_versions v ON v.document_id = d.id
-     WHERE ($1 = '' OR d.title ILIKE '%' || $1 || '%')
-       AND v.version_number = (SELECT max(version_number) FROM document_versions WHERE document_id = d.id)
-     ORDER BY d.area, d.category, d.title`,
+    `SELECT
+       COALESCE((
+         SELECT json_agg(json_build_object(
+                  'id', d.id, 'area', d.area, 'category', d.category, 'title', d.title,
+                  'immutable', d.immutable, 'version_number', v.version_number, 'uploaded_at', v.uploaded_at
+                ) ORDER BY d.area, d.category, d.title)
+         FROM documents d
+         JOIN document_versions v ON v.document_id = d.id
+         WHERE ($1 = '' OR d.title ILIKE '%' || $1 || '%')
+           AND v.version_number = (SELECT max(version_number) FROM document_versions WHERE document_id = d.id)
+       ), '[]'::json) AS documents,
+       COALESCE((
+         SELECT json_agg(json_build_object(
+                  'id', id, 'subject', subject, 'closed_at', closed_at, 'outcome', outcome
+                ) ORDER BY closed_at DESC)
+         FROM votes
+         WHERE status = 'closed' AND ($1 = '' OR subject ILIKE '%' || $1 || '%')
+       ), '[]'::json) AS closed`,
     [query],
   );
-  const register = rows.filter((row) => row.area === "register");
-  const shared = rows.filter((row) => row.area === "shared");
-  const { rows: closed } = await pool.query<{ id: string; subject: string; closed_at: Date; outcome: string }>(
-    `SELECT id, subject, closed_at, outcome FROM votes
-     WHERE status = 'closed' AND ($1 = '' OR subject ILIKE '%' || $1 || '%')
-     ORDER BY closed_at DESC`,
-    [query],
-  );
+  const library = rows[0]?.documents ?? [];
+  const register = library.filter((row) => row.area === "register");
+  const shared = library.filter((row) => row.area === "shared");
+  const closed = rows[0]?.closed ?? [];
 
   return (
     <>

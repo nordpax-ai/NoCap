@@ -12,6 +12,7 @@
   background: var(--paper);
   color: var(--ink);
   font: 400 15px/1.6 var(--font-inter), system-ui, sans-serif;
+  width: 100%;
   min-height: 100svh;
   -webkit-font-smoothing: antialiased;
 }
@@ -22,7 +23,6 @@
 .mem .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0 10px; }
 .mem .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .mem .mark-img { height: 20px; width: auto; max-width: 120px; object-fit: contain; object-position: left center; display: block; }
-.mem .demo-flag { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
 .mem .me { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink-2); }
 .mem .bell { position: relative; }
 .mem .bell-btn {

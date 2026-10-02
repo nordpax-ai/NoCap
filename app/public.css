@@ -139,8 +139,8 @@ body { min-height: 100svh; }
   content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--coral); flex: 0 0 auto;
 }
 .pub .about-item p { font-size: 16px; color: var(--ink-soft); line-height: 1.55; margin: 0; padding-left: 17px; }
-.pub .mem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 46px; }
-.pub .mem { background: #fff; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; color: var(--ink); }
+.pub .mem-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin-top: 46px; align-items: start; }
+.pub .mem { background: #fff; border: 1px solid var(--line); border-radius: 3px; overflow: hidden; color: var(--ink); height: auto; min-height: 0; }
 .pub .mem-photo { aspect-ratio: 4/3; display: flex; align-items: flex-end; padding: 20px; position: relative; }
 .pub .mem-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .pub .mem-initials { font-family: var(--display); font-size: 54px; font-weight: 600; color: rgba(19, 31, 48, 0.26); letter-spacing: -0.02em; line-height: 1; position: relative; }

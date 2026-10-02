@@ -1,12 +1,6 @@
 import Link from "next/link";
+import { PublicNav } from "@/components/public-nav";
 import { env } from "@/lib/env";
-
-const LINKS = [
-  { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
-  { href: "/members", label: "Members" },
-  { href: "/publications", label: "Publications" },
-];
 
 function Lock() {
   return (
@@ -17,7 +11,7 @@ function Lock() {
   );
 }
 
-export function PublicShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
+export function PublicShell({ children }: { children: React.ReactNode }) {
   const contact = env.contactEmail();
   return (
     <div className="pub">
@@ -27,18 +21,7 @@ export function PublicShell({ pathname, children }: { pathname: string; children
             <img className="nav-mark navy" src="/brand/mark-navy.png" alt="nocap" />
             <img className="nav-mark cream" src="/brand/mark-cream.png" alt="" />
           </Link>
-          <ul className="nav-links">
-            {LINKS.map((link) => {
-              const active = link.href === "/" ? pathname === "/" : pathname === link.href || pathname.startsWith(`${link.href}/`);
-              return (
-                <li key={link.href}>
-                  <Link href={link.href} className={active ? "active" : undefined}>
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <PublicNav />
           <Link className="nav-priv" href="/login">
             <Lock />
             <span>Private area</span>

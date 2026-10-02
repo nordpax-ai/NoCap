@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
+import { AreaNav } from "@/components/area-nav";
 import { SubmitButton } from "@/components/submit-button";
 import { logout } from "@/lib/actions";
 import { initials, type Member } from "@/lib/auth";
@@ -14,13 +15,11 @@ const LINKS = [
 
 export function MembersShell({
   user,
-  pathname,
   notifications,
   unread,
   children,
 }: {
   user: Member;
-  pathname: string;
   notifications: BellItem[];
   unread: number;
   children: React.ReactNode;
@@ -29,9 +28,6 @@ export function MembersShell({
     user.role === "admin"
       ? [...LINKS, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/outbox", label: "Outbox" }]
       : LINKS;
-  const active = links
-    .filter((link) => (link.href === "/area" ? pathname === "/area" : pathname === link.href || pathname.startsWith(`${link.href}/`)))
-    .sort((a, b) => b.href.length - a.href.length)[0];
   return (
     <div className="mem">
       <div className="wrap">
@@ -59,16 +55,7 @@ export function MembersShell({
               </ActionForm>
             </div>
           </div>
-          <nav className="subnav" aria-label="Members' area">
-            {links.map((link) => {
-              const on = active?.href === link.href;
-              return (
-                <Link key={link.href} href={link.href} className={on ? "on" : undefined}>
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <AreaNav links={links} />
         </header>
         {children}
         <p className="foot">

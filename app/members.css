@@ -57,7 +57,10 @@
 .mem .avatar img, .mem .avatar-lg img { width: 100%; height: 100%; object-fit: cover; }
 .mem .subnav { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0 14px; }
 .mem .subnav a { font-size: 13px; color: var(--ink-2); text-decoration: none; border-bottom: 1px solid transparent; padding-bottom: 1px; }
-.mem .subnav a.on, .mem .subnav a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.mem .subnav a.on { color: var(--ink); border-bottom-color: var(--ink); }
+@media (hover: hover) {
+  .mem .subnav a:hover { color: var(--ink); border-bottom-color: var(--ink); }
+}
 .mem .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
 .mem .eyebrow { font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--ink-3); }
 .mem .act, .mem .dl {

@@ -27,6 +27,7 @@ export const env = {
   storageDir: () => process.env.STORAGE_LOCAL_DIR || "./var/storage",
   cronSecret: () => process.env.CRON_SECRET || "change-me",
   sessionDays: () => Number(process.env.SESSION_DAYS || "30"),
+  demoMode: () => ["true", "1"].includes((process.env.DEMO_MODE || "").trim().toLowerCase()),
   smtp: () => ({
     host: process.env.SMTP_HOST || "",
     port: Number(process.env.SMTP_PORT || "587"),

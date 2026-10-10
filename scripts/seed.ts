@@ -135,7 +135,11 @@ const publications = [
   ["cross-border-nordic-habits", "Cross-border", "Nordic sellers, continental buyers: five habits that clash", "Disclosure culture, warranty expectations and the meaning of \"agreed form\" travel worse than anyone expects.", "Erik Lindqvist", "2025-12-11", false],
 ] as const;
 
-export async function seedDatabase(options: { reset: boolean }): Promise<void> {
+export async function seedDatabase(options: { reset: boolean }): Promise<boolean> {
+  if (!env.demoMode()) {
+    console.log("DEMO_MODE is not true or 1. Example data was not written.");
+    return false;
+  }
   const pool = new Pool(pgPoolConfig(env.ownerDatabaseUrl(), 1));
   const client = await pool.connect();
   try {
@@ -146,13 +150,14 @@ export async function seedDatabase(options: { reset: boolean }): Promise<void> {
       ]);
       if (existing.rowCount) {
         console.log("Demo data already present. Seed skipped.");
-        return;
+        return true;
       }
     }
     await client.query("BEGIN");
     await client.query(`SELECT set_config('nocap.register_write', 'on', true)`);
     await writeSeed(client, options.reset);
     await client.query("COMMIT");
+    return true;
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;

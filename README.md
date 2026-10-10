@@ -29,6 +29,8 @@ npm run dev
 
 Open http://localhost:3000.
 
+Example data is written only when `DEMO_MODE` is `true` or `1`. `.env.example` ships `DEMO_MODE=0`. Set `DEMO_MODE=true` in `.env.local` before `npm run db:seed` or `npm run db:deploy` when you want the example members, votes and publications. Any other value, including unset, makes both commands skip the seed. Migrations still run.
+
 `db:setup` creates the `nocap` database and the two local roles (`nocap_owner` / `nocap_app`, passwords `nocap_owner` / `nocap_app`). Change those passwords before any shared environment.
 
 ### Demo sign-in
@@ -75,7 +77,7 @@ Closed votes and resolutions cannot be updated or deleted, including by the data
 
 This is the client demo that replaces the static site `nocap-preview.netlify.app`. The app runs on Netlify. The database is Supabase Postgres in Frankfurt (`eu-central-1`). Nothing in this repository deploys itself, and `@netlify/database` is not a dependency, so Netlify does not create a database.
 
-The build uses the current Netlify Next.js runtime (`@netlify/plugin-nextjs` 5.16.0, the OpenNext adapter) and Node `22.14.0`, both set in `netlify.toml`. Each build runs `npm run db:deploy`, which migrates and, only when `paolo.piccirilli@example.invalid` is absent, loads the demo. A second build does not wipe votes or members.
+The build uses the current Netlify Next.js runtime (`@netlify/plugin-nextjs` 5.16.0, the OpenNext adapter) and Node `22.14.0`, both set in `netlify.toml`. Each build runs `npm run db:deploy`, which migrates and, only when `DEMO_MODE` is `true` or `1` and `paolo.piccirilli@example.invalid` is absent, loads the demo. A second build does not wipe votes or members. Without `DEMO_MODE`, the build migrates and writes no example data.
 
 ### Supabase
 
@@ -103,7 +105,7 @@ Migrations in `db/migrations` do not enable extensions. `gen_random_uuid()` is b
 
 ### Environment variables
 
-Set these in the Netlify UI (**Site configuration → Environment variables**) for Builds and Functions. `netlify.toml` already sets `DEMO_MODE`, `EMAIL_PROVIDER` and `STORAGE_DRIVER` for the build. Repeat them in the UI so the running functions see them.
+Set these in the Netlify UI (**Site configuration → Environment variables**) for Builds and Functions. `netlify.toml` sets `EMAIL_PROVIDER` and `STORAGE_DRIVER` for the build. It does not set `DEMO_MODE`. The client demo sets `DEMO_MODE` to `true` or `1` in that same UI, for Builds. Repeat `EMAIL_PROVIDER` and `STORAGE_DRIVER` in the UI so the running functions see them.
 
 | Variable | Value |
 | --- | --- |
@@ -111,19 +113,20 @@ Set these in the Netlify UI (**Site configuration → Environment variables**) f
 | `DATABASE_URL_POOL` | Same user, host and database, port `6543`. Set it for Functions. Optional: if it is unset, the site keeps using `DATABASE_URL`. |
 | `STORAGE_DRIVER` | `netlify-blobs` |
 | `EMAIL_PROVIDER` | `log` |
+| `DEMO_MODE` | `true` or `1` only for the client demo, set in the Netlify UI for Builds. Leave it unset in production. `db:deploy` and `npm run db:seed` write example data only then. |
 | `APP_TIMEZONE` | `Europe/Rome` |
 | `CRON_SECRET` | A long random string. Optional. The scheduled closer calls Postgres directly and does not need it. `POST /api/jobs/close-votes` still expects `Authorization: Bearer` this value, or `change-me` if it is unset. |
 | `FOUNDING_COMMITTEE_EMAIL` | `founding-committee@nocap-law.com` (placeholder) |
 | `CONTACT_EMAIL` | `contact@nocap-law.com` (placeholder) |
 | `EMAIL_FROM` | `nocap <noreply@nocap-law.com>` |
 
-Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`. Leave `DATABASE_URL_OWNER` unset. `DEMO_MODE` is no longer read; leaving it set does nothing.
+Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`. Leave `DATABASE_URL_OWNER` unset. Do not put `DEMO_MODE` in `netlify.toml`. For this demo site, set `DEMO_MODE` to `true` or `1` in the Netlify UI. For production, leave `DEMO_MODE` unset so a deploy cannot load the example members, votes or publications.
 
 ### What a deploy does
 
 1. The site is connected to this repository. The build command and publish directory come from `netlify.toml` (`npm run db:deploy && npm run build`, publish `.next`).
 2. Replace `DATABASE_URL` with the Supabase session pooler URI, scoped to Builds and Functions. Set the other variables in the table. `STORAGE_DRIVER=netlify-blobs` selects the Blobs adapter. The store name is `nocap-files`.
-3. Deploy. Netlify does not create a database. `db:deploy` connects to Supabase, applies `db/migrations`, and seeds the demo when the demo admin is absent. The build cannot write Netlify Blobs, so seed files are stored as keys and created in Blobs on the first download. `npm run build` follows.
+3. Deploy. Netlify does not create a database. `db:deploy` connects to Supabase and applies `db/migrations`. It seeds the demo only when `DEMO_MODE` is `true` or `1` and the demo admin is absent. The build cannot write Netlify Blobs, so seed files are stored as keys and created in Blobs on the first download. `npm run build` follows.
 4. Later deploys migrate and skip the seed. Deploy previews use the same `DATABASE_URL` unless you give them a different one.
 5. Open the site, sign in, and use **Outbox** for invite links. They point at the deployed URL.
 
@@ -144,7 +147,7 @@ Logged mail is not sent. The admin reads it at `/area/admin/outbox`. Files are s
 npm run db:deploy
 ```
 
-This uses `DATABASE_URL_OWNER` when that value is a Postgres URL, then `DATABASE_URL`. It is safe to run twice.
+This uses `DATABASE_URL_OWNER` when that value is a Postgres URL, then `DATABASE_URL`. It is safe to run twice. Example data is included only when `DEMO_MODE` is `true` or `1`.
 
 ## Deploy in the EU
 

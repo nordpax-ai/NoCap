@@ -11,7 +11,9 @@
 
 [build.environment]
   NODE_VERSION = "22.14.0"
-  DEMO_MODE = "1"
+  # DEMO_MODE is not set here. The client demo sets DEMO_MODE=true or 1
+  # in the Netlify UI (Site configuration → Environment variables).
+  # Leave it unset for production so db:deploy does not write example data.
   EMAIL_PROVIDER = "log"
   STORAGE_DRIVER = "netlify-blobs"
 

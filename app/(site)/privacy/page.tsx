@@ -1,6 +1,6 @@
 export const metadata = { title: "Privacy policy" };
 
-const CONTACT = "piccirillifrancescopaolo@gmail.com";
+const CONTACT = "contact@nocap-law.com";
 
 export default function PrivacyPage() {
   return (

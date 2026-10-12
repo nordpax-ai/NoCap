@@ -216,6 +216,13 @@ body { min-height: 100svh; }
 .pub .prose { max-width: 720px; color: var(--ink-soft); }
 .pub .prose h2 { font-family: var(--display); font-size: 22px; color: var(--ink); margin: 32px 0 10px; }
 .pub .prose p { margin: 0 0 14px; }
+.pub .prose ul { margin: 0 0 14px; padding-left: 1.2em; }
+.pub .prose li { margin: 0 0 8px; }
+.pub .prose table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 14.5px; }
+.pub .prose th, .pub .prose td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; text-align: left; }
+.pub .prose th { background: #f6f4ef; color: var(--ink); font-weight: 600; }
+.pub .prose a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.pub .updated-line { margin: 0 0 18px; color: var(--slate); font-size: 14.5px; }
 .pub a:focus-visible, .pub button:focus-visible { outline: 2.5px solid var(--coral); outline-offset: 3px; border-radius: 4px; }
 @media (min-width: 900px) {
   .pub .wrap {

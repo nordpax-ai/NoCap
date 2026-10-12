@@ -40,6 +40,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
               <Link href="/about">About</Link>
               <Link href="/members">Members</Link>
               <Link href="/publications">Publications</Link>
+              <Link href="/privacy">Privacy</Link>
               <a href={`mailto:${contact}`}>Contact</a>
             </div>
           </div>

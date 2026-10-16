@@ -274,8 +274,11 @@ export async function registerMember(formData: FormData) {
     id = rows[0].id;
   } catch (error) {
     await recordAttempt(client, false);
-    const closed = errorMessage(error).includes("closed");
-    go("/register", closed ? undefined : "We could not register you with those details. Ask an admin if you need help.");
+    const message = errorMessage(error);
+    if (message.includes("closed")) go("/register");
+    if (message.includes("details not accepted"))
+      go("/register", "This email is already registered. Sign in instead, or ask an admin if you cannot get in.");
+    go("/register", "We could not register you right now. Please try again, or ask an admin.");
   }
   await recordAttempt(client, true);
   await startSession(id);

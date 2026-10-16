@@ -24,7 +24,7 @@ import { readUpload, safeFilename, storageDelete, storagePut } from "./storage";
 import type { PoolClient } from "pg";
 import { parseClubDateTime } from "./time";
 import { closeDueVotes } from "./votes";
-import { clientHash, codeHash, recordAttempt, registrationState, tooManyAttempts } from "./registration";
+import { clientHash, recordAttempt, registrationState, tooManyAttempts } from "./registration";
 
 function go(path: string, error?: string): never {
   const url = error ? `${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(error)}` : path;
@@ -256,10 +256,9 @@ export async function registerMember(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
-  const code = String(formData.get("code") || "");
   const state = await registrationState();
   if (!state.open) go("/register");
-  if (!name || !email || !code) go("/register", "Please fill in every field.");
+  if (!name || !email) go("/register", "Please fill in every field.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) go("/register", "Please enter a valid email.");
   const problem = passwordProblem(password);
   if (problem) go("/register", problem);
@@ -269,14 +268,14 @@ export async function registerMember(formData: FormData) {
   try {
     const hash = await hashPassword(password);
     const { rows } = await pool.query<{ id: string }>(
-      `SELECT private.register_member($1, $2, $3, $4) AS id`,
-      [email, name, hash, codeHash(code)],
+      `SELECT private.register_member_open($1, $2, $3) AS id`,
+      [email, name, hash],
     );
     id = rows[0].id;
   } catch (error) {
     await recordAttempt(client, false);
     const closed = errorMessage(error).includes("closed");
-    go("/register", closed ? undefined : "We could not register you with those details. Check the group code or ask an admin.");
+    go("/register", closed ? undefined : "We could not register you with those details. Ask an admin if you need help.");
   }
   await recordAttempt(client, true);
   await startSession(id);
@@ -286,17 +285,12 @@ export async function registerMember(formData: FormData) {
 export async function setRegistration(formData: FormData) {
   const admin = await requireAdmin();
   const mode = String(formData.get("mode") || "");
-  const code = String(formData.get("code") || "").trim();
   let open: boolean | null = null;
-  let hash: string | null = null;
   if (mode === "open") open = true;
   else if (mode === "close") open = false;
-  else if (mode === "code") {
-    if (code.length < 6) go("/area/admin#registration", "Use a group code of at least 6 characters.");
-    hash = codeHash(code);
-  } else go("/area/admin#registration", "Unknown action.");
+  else go("/area/admin#registration", "Unknown action.");
   try {
-    await pool.query(`SELECT private.set_registration($1, $2, $3)`, [admin.id, open, hash]);
+    await pool.query(`SELECT private.set_registration($1, $2, $3)`, [admin.id, open, null]);
   } catch (error) {
     go("/area/admin#registration", errorMessage(error));
   }

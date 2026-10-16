@@ -24,7 +24,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           </>
         ) : (
           <>
-            <p className="mb-ask">For founding members only. Use the group code you received from the chair.</p>
+            <p className="mb-ask">For founding members of NoCap. Register with your name, email and a password.</p>
             {error ? <p className="note">{error}</p> : null}
             <ActionForm action={registerMember}>
               <div className="fld">
@@ -38,10 +38,6 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
               <div className="fld">
                 <label htmlFor="password">Password</label>
                 <input id="password" name="password" type="password" autoComplete="new-password" required minLength={10} />
-              </div>
-              <div className="fld">
-                <label htmlFor="code">Group code</label>
-                <input id="code" name="code" autoComplete="off" autoCapitalize="none" spellCheck={false} required />
               </div>
               <SubmitButton className="btn" dark>Register and enter</SubmitButton>
             </ActionForm>

@@ -82,26 +82,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       </table>
       <section id="registration" style={{ marginTop: 36 }}>
         <h2 className="page-title" style={{ fontSize: "1.4em" }}>Open registration</h2>
-        <p className="help">Share the link and the group code with the members. Close registration once everyone is in; after that new people join only by invite.</p>
+        <p className="help">While registration is open, anyone with the link can register. Share it with the members. Close registration once everyone is in; after that new people join only by invite.</p>
         {registration ? <p className="banner">Registration settings saved.</p> : null}
         <p>
           Status: <strong>{state.open ? "Open" : "Closed"}</strong>
-          {" · "}Group code: {state.hasCode ? "set" : "not set"}
         </p>
         <p>Link: <a href={REGISTER_URL}>{REGISTER_URL}</a></p>
         <ActionForm action={setRegistration}>
           <input type="hidden" name="mode" value={state.open ? "close" : "open"} />
           <SubmitButton className="btn solid">{state.open ? "Close registration" : "Open registration"}</SubmitButton>
         </ActionForm>
-        <ActionForm action={setRegistration} className="stack">
-          <input type="hidden" name="mode" value="code" />
-          <div>
-            <label className="lbl" htmlFor="code">{state.hasCode ? "Change group code" : "Set group code"}</label>
-            <input id="code" name="code" autoComplete="off" minLength={6} required />
-          </div>
-          <SubmitButton className="btn">Save code</SubmitButton>
-        </ActionForm>
-        <p className="help">The code is stored only as a hash, so it cannot be shown again. To share it, set a new one.</p>
         <p style={{ marginTop: 18 }}><strong>{activeRegistered}</strong> member{activeRegistered === 1 ? "" : "s"} registered with the link.</p>
         {registered.length ? (
           <table>

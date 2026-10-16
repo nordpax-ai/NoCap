@@ -32,9 +32,6 @@ export default async function MembersPage() {
     <div className="wrap inner">
       <div className="eyebrow">Members</div>
       <h1 className="pt">The people, not the letterheads.</h1>
-      <p className="lede">
-        Twelve lawyers across eight European jurisdictions, working on M&amp;A, private equity, venture capital and corporate transactions - with their story, their practice, their market and the firm they sit in.
-      </p>
       <div className="mem-grid">
         {rows.map((member) => (
           <article className="mem" key={member.id}>

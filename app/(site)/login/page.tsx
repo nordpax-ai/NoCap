@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="mb-form">
         <div className="eyebrow">Private area</div>
         <h1 className="pt">Sign in</h1>
-        <p className="mb-ask">Members only. There is no open signup. If you have lost access, reset your password or write to the chair.</p>
+        <p className="mb-ask">Members only. If you have lost access, reset your password or write to the chair.</p>
         {error ? <p className="note">{error}</p> : null}
         <ActionForm action={login}>
           <div className="fld">

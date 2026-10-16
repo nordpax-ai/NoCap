@@ -320,7 +320,7 @@ export async function uploadShared(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   if (!title) go("/area/documents?area=shared", "Give the document a title.");
   try {
-    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 4.5 * 1024 * 1024, kinds: "any" });
     await guardedCreate(
       user.id,
       "document",
@@ -360,7 +360,7 @@ export async function uploadSharedVersion(formData: FormData) {
   const documentId = String(formData.get("document_id") || "");
   const back = `/area/documents/${documentId}`;
   try {
-    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 4.5 * 1024 * 1024, kinds: "any" });
     await guardedCreate(
       user.id,
       "document-version",
@@ -408,7 +408,7 @@ export async function uploadRegister(formData: FormData) {
   const existing = String(formData.get("document_id") || "");
   if (!title && !existing) go("/area/documents", "Give the document a title.");
   try {
-    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const file = await readUpload(formData.get("file"), { required: true, maxBytes: 4.5 * 1024 * 1024, kinds: "any" });
     await guardedCreate(
       admin.id,
       existing ? "document-version" : "document",
@@ -810,7 +810,7 @@ export async function createPublication(formData: FormData) {
   const slug = slugify(title);
   let pdfKey: string | null = null;
   try {
-    const pdf = await readUpload(formData.get("pdf"), { maxBytes: 15 * 1024 * 1024, kinds: "pdf" });
+    const pdf = await readUpload(formData.get("pdf"), { maxBytes: 4.5 * 1024 * 1024, kinds: "pdf" });
     if (pdf) {
       pdfKey = `publications/${slug}-${pdf.filename}`;
       await storagePut(pdfKey, pdf.buffer, pdf.mime);
@@ -829,7 +829,7 @@ export async function createPublication(formData: FormData) {
 async function saveAttachments(formData: FormData, parentType: string, parentId: string, userId: string) {
   const entries = formData.getAll("attachments");
   for (const entry of entries) {
-    const file = await readUpload(entry, { maxBytes: 15 * 1024 * 1024, kinds: "any" });
+    const file = await readUpload(entry, { maxBytes: 4.5 * 1024 * 1024, kinds: "any" });
     if (!file) continue;
     const key = `attachments/${parentType}/${parentId}/${randomUUID()}-${safeFilename(file.filename)}`;
     await storagePut(key, file.buffer, file.mime);

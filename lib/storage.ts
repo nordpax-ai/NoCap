@@ -180,7 +180,7 @@ export async function readUpload(
     return null;
   }
   if (entry.size > options.maxBytes) {
-    const mb = Math.max(1, Math.round(options.maxBytes / (1024 * 1024)));
+    const mb = Math.round((options.maxBytes / (1024 * 1024)) * 10) / 10;
     if (options.kinds === "image") {
       throw new Error(`That photo is larger than ${mb} MB. Use a smaller JPEG, PNG or WebP image.`);
     }

@@ -74,7 +74,7 @@ export default async function DocumentsPage({
               </label>
               <DocIcon />
               <Link className="doc-name" href={`/area/documents/${doc.id}`}>{doc.title}</Link>
-              <span className="doc-meta">{doc.category.replaceAll("_", " ")} · v{doc.version_number} · {formatShort(doc.uploaded_at)}</span>
+              <span className="doc-meta">{doc.category.replaceAll("_", " ")} · v{doc.version_number}</span>
             </div>
           ))}
           {closed.map((vote) => (

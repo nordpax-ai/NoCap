@@ -123,6 +123,14 @@ export async function setPasswordFromToken(formData: FormData) {
   redirect("/area");
 }
 
+export async function setEmailNotifications(formData: FormData) {
+  const user = await requireUser();
+  const on = formData.get("email_notifications") === "on";
+  await pool.query(`UPDATE profiles SET email_notifications = $2, updated_at = now() WHERE id = $1`, [user.id, on]);
+  revalidatePath("/area/profile");
+  redirect("/area/profile?email=saved");
+}
+
 export async function updateProfile(formData: FormData) {
   const user = await requireUser();
   const displayName = String(formData.get("display_name") || "").trim();

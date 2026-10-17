@@ -1,5 +1,6 @@
 import { pool } from "./db";
 import { appLink, sendEmail } from "./email";
+import { unsubscribeToken } from "./unsubscribe";
 
 export type Notice = {
   recipientId: string;
@@ -25,11 +26,18 @@ export async function notifyMany(notices: Notice[]): Promise<number> {
       [notice.recipientId, notice.kind, notice.title, notice.body, notice.href, notice.eventKey],
     );
     if (rows.length === 0) continue;
+    const pref = await pool.query<{ email_notifications: boolean }>(
+      `SELECT email_notifications FROM profiles WHERE id = $1`,
+      [notice.recipientId],
+    );
+    if (!pref.rows[0]?.email_notifications) continue;
     sent += 1;
     await sendEmail({
       to: [notice.email],
       subject: notice.title,
-      text: `${notice.body}\n\n${appLink(notice.href)}\n`,
+      text:
+        `${notice.body}\n\n${appLink(notice.href)}\n\n--\n` +
+        `Stop these emails: ${appLink(`/unsubscribe/${unsubscribeToken(notice.recipientId)}`)}\n`,
     });
   }
   return sent;

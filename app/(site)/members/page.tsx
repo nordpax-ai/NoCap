@@ -1,4 +1,6 @@
-import { pool } from "@/lib/db";
+import { publicRows } from "@/lib/public-data";
+
+export const revalidate = 300;
 
 export const metadata = { title: "Members" };
 
@@ -17,17 +19,15 @@ function initials(name: string) {
 }
 
 export default async function MembersPage() {
-  const { rows } = await pool.query<{
+  const rows = await publicRows<{
     id: string;
     display_name: string;
     public_role: string | null;
     bio: string | null;
     city: string | null;
     jurisdiction: string | null;
-  }>(
-    `SELECT id, display_name, public_role, bio, city, jurisdiction
-     FROM public_members ORDER BY sort, display_name`,
-  );
+  }>(`SELECT id, display_name, public_role, bio, city, jurisdiction
+     FROM public_members ORDER BY sort, display_name`);
   return (
     <div className="wrap inner">
       <div className="eyebrow">Members</div>

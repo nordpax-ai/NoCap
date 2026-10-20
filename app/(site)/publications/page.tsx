@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { pool } from "@/lib/db";
+import { publicRows } from "@/lib/public-data";
 import { formatWhen } from "@/lib/time";
+
+export const revalidate = 300;
 
 export const metadata = { title: "Publications" };
 
 export default async function PublicationsPage() {
-  const { rows } = await pool.query<{
+  const rows = await publicRows<{
     slug: string;
     title: string;
     category: string;
@@ -13,13 +15,11 @@ export default async function PublicationsPage() {
     published_on: Date;
     display_name: string | null;
     city: string | null;
-  }>(
-    `SELECT pub.slug, pub.title, pub.category, pub.summary, pub.published_on,
+  }>(`SELECT pub.slug, pub.title, pub.category, pub.summary, pub.published_on,
             p.display_name, p.city
      FROM publications pub
      LEFT JOIN profiles p ON p.id = pub.author_id
-     ORDER BY pub.published_on DESC`,
-  );
+     ORDER BY pub.published_on DESC`);
   return (
     <div className="wrap inner">
       <div className="eyebrow">Publications</div>

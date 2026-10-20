@@ -1,3 +1,5 @@
+export const revalidate = 300;
+
 export const metadata = { title: "Privacy policy" };
 
 const CONTACT = "contact@nocap-law.com";

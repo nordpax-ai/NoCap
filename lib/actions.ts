@@ -128,6 +128,8 @@ export async function setEmailNotifications(formData: FormData) {
   const on = formData.get("email_notifications") === "on";
   await pool.query(`UPDATE profiles SET email_notifications = $2, updated_at = now() WHERE id = $1`, [user.id, on]);
   revalidatePath("/area/profile");
+  // Author names appear on the public publications pages.
+  revalidatePath("/publications", "layout");
   redirect("/area/profile?email=saved");
 }
 
@@ -830,7 +832,8 @@ export async function createPublication(formData: FormData) {
   } catch (error) {
     go("/area/publications/new", errorMessage(error));
   }
-  revalidatePath("/publications");
+  revalidatePath("/publications", "layout");
+  revalidatePath("/");
   redirect(`/publications/${slug}`);
 }
 

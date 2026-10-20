@@ -3,6 +3,13 @@ import { notFound } from "next/navigation";
 import { pool } from "@/lib/db";
 import { formatWhen } from "@/lib/time";
 
+export const revalidate = 300;
+
+// Rendered on first visit, then cached; nothing is prerendered at build time.
+export async function generateStaticParams() {
+  return [];
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const { rows } = await pool.query<{ title: string }>(`SELECT title FROM publications WHERE slug = $1`, [slug]);

@@ -5,6 +5,7 @@ import { runVoteMaintenance } from "@/lib/votes";
 import { redirect } from "next/navigation";
 
 export const metadata = { title: "Members' area" };
+export const dynamic = "force-dynamic";
 
 export default async function AreaLayout({ children }: { children: React.ReactNode }) {
   try {

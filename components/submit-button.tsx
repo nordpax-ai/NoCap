@@ -11,6 +11,8 @@ export function SubmitButton({
   disabled = false,
   id,
   dark = false,
+  name,
+  value,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
@@ -18,13 +20,15 @@ export function SubmitButton({
   disabled?: boolean;
   id?: string;
   dark?: boolean;
+  name?: string;
+  value?: string;
 }) {
   const { pending } = useFormStatus();
   const locked = useContext(FormBusy);
   const busy = pending || locked;
   const onDark = dark || Boolean(className?.split(/\s+/).includes("solid"));
   return (
-    <button id={id} className={className} type="submit" disabled={busy || disabled} aria-busy={busy}>
+    <button id={id} name={name} value={value} className={className} type="submit" disabled={busy || disabled} aria-busy={busy}>
       {busy ? (
         <>
           <span className={onDark ? "spinner on-dark" : "spinner"} aria-hidden="true" />

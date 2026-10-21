@@ -54,6 +54,7 @@ export type AreaFrame = {
   notifications: { id: string; title: string; href: string; when: string }[];
   unread: number;
   needsMaintenance: boolean;
+  hasArticle: boolean;
 };
 
 function memberFromRow(row: AreaFrameRow): Member {
@@ -92,6 +93,7 @@ export const loadAreaFrame = cache(async (): Promise<AreaFrame | null> => {
     })),
     unread: notes.filter((note) => !note.read_at).length,
     needsMaintenance: row.needs_maintenance,
+    hasArticle: row.has_article,
   };
 });
 

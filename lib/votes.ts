@@ -1,6 +1,7 @@
 import { pool } from "./db";
 import { logServerError } from "./log";
 import { notifyMany } from "./notify";
+import { sendArticleReminders } from "./articles";
 import { failureReason, outcomeLabel, buildVoteRecordPdf, type VoteRecord } from "./pdf";
 import { formatPollCounts, joinLabels, leadingTie } from "./poll";
 import { storageExists, storageGet, storagePut } from "./storage";
@@ -33,6 +34,7 @@ export function runVoteMaintenance(): Promise<void> {
 
 async function runVoteMaintenanceOnce(): Promise<void> {
   await sendDueReminders();
+  await sendArticleReminders().catch((error) => console.error("article reminders", error));
   const { rows } = await pool.query<{ id: string }>(
     `SELECT id FROM votes WHERE status = 'open' AND deadline <= now()`,
   );

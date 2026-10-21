@@ -17,17 +17,20 @@ export function MembersShell({
   user,
   notifications,
   unread,
+  hasArticle = false,
   children,
 }: {
   user: Member;
   notifications: BellItem[];
   unread: number;
+  hasArticle?: boolean;
   children: React.ReactNode;
 }) {
+  const base = hasArticle ? [...LINKS, { href: "/area/article", label: "Your article" }] : LINKS;
   const links =
     user.role === "admin"
-      ? [...LINKS, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/outbox", label: "Outbox" }]
-      : LINKS;
+      ? [...base, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/articles", label: "Articles" }, { href: "/area/admin/outbox", label: "Outbox" }]
+      : base;
   return (
     <div className="mem">
       <div className="wrap">

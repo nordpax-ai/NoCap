@@ -25,6 +25,7 @@ export type AreaFrameRow = {
   is_example: boolean;
   notes: AreaNote[] | null;
   needs_maintenance: boolean;
+  has_article: boolean;
 };
 
 export async function fetchAreaFrame(tokenHash: string): Promise<AreaFrameRow | null> {
@@ -36,7 +37,8 @@ export async function fetchAreaFrame(tokenHash: string): Promise<AreaFrameRow | 
             EXISTS (
               SELECT 1 FROM votes v
               WHERE v.status = 'open' AND v.deadline <= now() + interval '48 hours'
-            ) AS needs_maintenance
+            ) AS needs_maintenance,
+            EXISTS (SELECT 1 FROM article_assignments aa WHERE aa.member_id = p.id) AS has_article
      FROM sessions s
      JOIN profiles p ON p.id = s.profile_id
      LEFT JOIN LATERAL (

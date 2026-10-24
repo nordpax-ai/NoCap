@@ -7,6 +7,7 @@ export type EmailMessage = {
   to: string[];
   subject: string;
   text: string;
+  replyTo?: string;
 };
 
 export async function sendEmail(message: EmailMessage): Promise<void> {
@@ -49,12 +50,14 @@ async function sendSmtp(message: EmailMessage): Promise<void> {
     secure: smtp.port === 465,
     auth: smtp.user ? { user: smtp.user, pass: smtp.pass } : undefined,
   });
-  await transport.sendMail({
+  const info = await transport.sendMail({
     from: env.emailFrom(),
     to: message.to.join(", "),
     subject: message.subject,
     text: message.text,
+    ...(message.replyTo ? { replyTo: message.replyTo } : {}),
   });
+  console.log(`[email] smtp accepted=${info.accepted.length} rejected=${info.rejected.length} id=${info.messageId}`);
 }
 
 export function appLink(pathname: string): string {

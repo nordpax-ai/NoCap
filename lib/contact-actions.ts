@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "./auth";
 import { pool } from "./db";
+import { appLink, sendEmail } from "./email";
 import { clientHash } from "./registration";
+import { unsubscribeToken } from "./unsubscribe";
 
 const LIMITS = { name: 120, email: 254, subject: 200, message: 5000 };
 
@@ -44,13 +46,38 @@ export async function sendContactMessage(formData: FormData) {
   );
   const id = inserted[0].id;
   // Bell notification to active admins only. No email.
-  await pool.query(
-    `INSERT INTO notifications (recipient_id, kind, title, body, href, event_key)
-     SELECT p.id, 'contact_message', $1, $2, '/area/admin/messages', 'contact:' || $3 || ':' || p.id
-     FROM profiles p WHERE p.role = 'admin' AND p.status = 'active'
-     ON CONFLICT (recipient_id, event_key) DO NOTHING`,
+  const { rows: notified } = await pool.query<{ id: string; email: string; email_notifications: boolean }>(
+    `WITH ins AS (
+       INSERT INTO notifications (recipient_id, kind, title, body, href, event_key)
+       SELECT p.id, 'contact_message', $1, $2, '/area/admin/messages', 'contact:' || $3 || ':' || p.id
+       FROM profiles p WHERE p.role = 'admin' AND p.status = 'active'
+       ON CONFLICT (recipient_id, event_key) DO NOTHING
+       RETURNING recipient_id)
+     SELECT p.id, p.email, p.email_notifications FROM ins JOIN profiles p ON p.id = ins.recipient_id`,
     [`New contact message: ${name}`.slice(0, 200), subject ? `Subject: ${subject}`.slice(0, 300) : "Sent from the public contact form.", id],
   );
+  // Email to the same admins, respecting their email opt-out. Plain text, so
+  // the sender's input cannot inject markup; control characters are stripped.
+  const clean = (value: string) => value.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+  for (const admin of notified) {
+    if (!admin.email_notifications || !admin.email) continue;
+    try {
+      await sendEmail({
+        to: [admin.email],
+        subject: "New contact message on nocap",
+        replyTo: email,
+        text:
+          `New message from the nocap contact form.\n\n` +
+          `Name: ${clean(name)}\nEmail: ${email}\nSubject: ${clean(subject) || "(none)"}\n\n` +
+          `${clean(message)}\n\n` +
+          `Open the inbox: ${appLink("/area/admin/messages")}\n` +
+          `Reply directly to this email to answer ${clean(name)}.\n\n--\n` +
+          `Stop these emails: ${appLink(`/unsubscribe/${unsubscribeToken(admin.id)}`)}\n`,
+      });
+    } catch (err) {
+      console.error("[contact] admin email failed", err instanceof Error ? err.message : err);
+    }
+  }
   redirect("/contact?sent=1");
 }
 

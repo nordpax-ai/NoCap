@@ -29,7 +29,7 @@ export function MembersShell({
   const base = hasArticle ? [...LINKS, { href: "/area/article", label: "Your article" }] : LINKS;
   const links =
     user.role === "admin"
-      ? [...base, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/articles", label: "Articles" }, { href: "/area/admin/outbox", label: "Outbox" }]
+      ? [...base, { href: "/area/admin", label: "Admin" }, { href: "/area/admin/articles", label: "Articles" }, { href: "/area/admin/messages", label: "Messages" }, { href: "/area/admin/outbox", label: "Outbox" }]
       : base;
   return (
     <div className="mem">

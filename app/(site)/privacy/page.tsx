@@ -2,7 +2,6 @@ export const revalidate = 300;
 
 export const metadata = { title: "Privacy policy" };
 
-const CONTACT = "contact@nocap-law.com";
 
 export default function PrivacyPage() {
   return (
@@ -14,7 +13,7 @@ export default function PrivacyPage() {
         <h2>1. Controller</h2>
         <p>
           The controller of personal data is nocap (the “Club”), an informal association governed by Italian law.
-          Contact: <a href={`mailto:${CONTACT}`}>{CONTACT}</a>. Website:{" "}
+          Contact: the <a href="/contact">contact form</a>. Website:{" "}
           <a href="https://nocap-law.com">https://nocap-law.com</a>.
         </p>
         <p>
@@ -137,8 +136,7 @@ export default function PrivacyPage() {
 
         <h2>8. Your rights</h2>
         <p>
-          You may ask the Club for access to your data, its rectification or erasure, the restriction of its processing and its portability. You may object to processing based on legitimate interest, and withdraw consent at any time without affecting processing carried out before withdrawal. Requests go to{" "}
-          <a href={`mailto:${CONTACT}`}>{CONTACT}</a>.
+          You may ask the Club for access to your data, its rectification or erasure, the restriction of its processing and its portability. You may object to processing based on legitimate interest, and withdraw consent at any time without affecting processing carried out before withdrawal. Requests go to the Club through the <a href="/contact">contact form</a>.
         </p>
         <p>
           You may also lodge a complaint with the Garante per la protezione dei dati personali (www.garanteprivacy.it) or with the supervisory authority of the country where you live or work, or where the alleged infringement took place.

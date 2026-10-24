@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
-import { env } from "@/lib/env";
 
 function Lock() {
   return (
@@ -12,7 +11,6 @@ function Lock() {
 }
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
-  const contact = env.contactEmail();
   return (
     <div className="pub">
       <nav className="nav">
@@ -41,7 +39,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
               <Link href="/members">Members</Link>
               <Link href="/publications">Publications</Link>
               <Link href="/privacy">Privacy</Link>
-              <a href={`mailto:${contact}`}>Contact</a>
+              <Link href="/contact">Contact</Link>
             </div>
           </div>
           <div className="foot-bot">

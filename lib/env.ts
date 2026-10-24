@@ -17,7 +17,6 @@ export const env = {
   emailFrom: () => process.env.EMAIL_FROM || "nocap <noreply@nocap-law.com>",
   foundingCommitteeEmail: () =>
     process.env.FOUNDING_COMMITTEE_EMAIL || "founding-committee@nocap-law.com",
-  contactEmail: () => process.env.CONTACT_EMAIL || "contact@nocap-law.com",
   storageDriver: (): StorageDriver => {
     const raw = process.env.STORAGE_DRIVER || process.env.STORAGE_PROVIDER;
     if (raw === "netlify-blobs" || raw === "s3" || raw === "local") return raw;

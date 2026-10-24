@@ -117,7 +117,6 @@ Set these in the Netlify UI (**Site configuration → Environment variables**) f
 | `APP_TIMEZONE` | `Europe/Rome` |
 | `CRON_SECRET` | A long random string. Optional. The scheduled closer calls Postgres directly and does not need it. `POST /api/jobs/close-votes` still expects `Authorization: Bearer` this value, or `change-me` if it is unset. |
 | `FOUNDING_COMMITTEE_EMAIL` | `founding-committee@nocap-law.com` (placeholder) |
-| `CONTACT_EMAIL` | `contact@nocap-law.com` (placeholder) |
 | `EMAIL_FROM` | `nocap <noreply@nocap-law.com>` |
 
 Leave `APP_URL` unset. Invite links and other mail use Netlify's `URL`, then `DEPLOY_PRIME_URL`. Leave `DATABASE_URL_OWNER` unset. Do not put `DEMO_MODE` in `netlify.toml`. For this demo site, set `DEMO_MODE` to `true` or `1` in the Netlify UI. For production, leave `DEMO_MODE` unset so a deploy cannot load the example members, votes or publications.
@@ -178,7 +177,7 @@ Restoring is: create an empty database, `psql` the dump, put the files back unde
 These are not decided by the specification. They are implemented in a way that is easy to change.
 
 - **Publication detail.** A publication has a page and an optional PDF. Whether the real format is a page, a PDF, or both is open.
-- **Placeholders to replace.** Example member names, biographies and the absence of real photos. Example publications. The privacy policy, which is marked as a draft and is not legal advice. The logo is the mockup PNG, not a vector master. `CONTACT_EMAIL` and `FOUNDING_COMMITTEE_EMAIL`.
+- **Placeholders to replace.** Example member names, biographies and the absence of real photos. Example publications. The privacy policy, which is marked as a draft and is not legal advice. The logo is the mockup PNG, not a vector master. `FOUNDING_COMMITTEE_EMAIL`.
 - **Account and domain ownership.** `nocap-law.com` is not connected. No hosting account has been created by this repository.
 - **Email provider.** Local development logs mail. Production SMTP is not chosen.
 - **Timezone.** Deadlines typed into the forms are read as `Europe/Rome`. Confirm that with the club if another zone is intended.

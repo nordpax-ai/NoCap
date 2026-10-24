@@ -1,0 +1,24 @@
+# Client demo on Netlify. Replaces the static preview.
+# The Next.js runtime (OpenNext, @netlify/plugin-nextjs v5) is pinned here
+# so this site does not drift onto the legacy runtime.
+#
+# Postgres is Supabase in Frankfurt, via DATABASE_URL. This repo does not
+# depend on @netlify/database, so Netlify does not provision a database.
+
+[build]
+  command = "npm run db:deploy && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22.14.0"
+  # DEMO_MODE is not set here. The client demo sets DEMO_MODE=true or 1
+  # in the Netlify UI (Site configuration → Environment variables).
+  # Leave it unset for production so db:deploy does not write example data.
+  # EMAIL_PROVIDER is set per site in the Netlify UI (smtp in production).
+  STORAGE_DRIVER = "netlify-blobs"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  node_bundler = "esbuild"

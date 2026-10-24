@@ -1,0 +1,12 @@
+node_modules
+.next
+.netlify
+var
+deno.lock
+.env
+.env.local
+.env.*.local
+*.log
+tsconfig.tsbuildinfo
+next-env.d.ts
+.DS_Store
